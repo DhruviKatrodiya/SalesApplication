@@ -1,0 +1,151 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Orders</h1>
+    <button mat-flat-button color="primary" (click)="create()"><mat-icon>add</mat-icon> New Order</button>
+  </div>
+
+  <mat-card class="table-card">
+    <mat-card-content>
+      <div class="filters">
+        <mat-form-field appearance="fill" class="f-customer">
+          <mat-label>Customer Name</mat-label>
+          <input matInput [ngModel]="customerFilter()" (ngModelChange)="setCustomerFilter($event)" placeholder="Search customer" />
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="f-date">
+          <mat-label>Order Date</mat-label>
+          <input matInput [matDatepicker]="dp" [ngModel]="orderDateFilter()" (ngModelChange)="setOrderDateFilter($event)" />
+          <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
+          <mat-datepicker #dp></mat-datepicker>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="f-status">
+          <mat-label>Delivery Status</mat-label>
+          <mat-select [ngModel]="deliveryStatusFilter()" (ngModelChange)="setDeliveryStatusFilter($event)">
+            <mat-option [value]="null">All</mat-option>
+            @for (s of statusOptions; track s.value) { <mat-option [value]="s.value">{{ s.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="f-status">
+          <mat-label>Paid Status</mat-label>
+          <mat-select [ngModel]="paidStatusFilter()" (ngModelChange)="setPaidStatusFilter($event)">
+            <mat-option [value]="null">All</mat-option>
+            @for (p of paymentOptions; track p.value) { <mat-option [value]="p.value">{{ p.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+
+        @if (hasFilters()) {
+          <button mat-stroked-button class="f-clear" (click)="clearFilters()"><mat-icon>clear</mat-icon> Clear</button>
+        }
+      </div>
+
+      <table mat-table [dataSource]="pager.paged()" multiTemplateDataRows>
+        <ng-container matColumnDef="expand">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let o">
+            <button mat-icon-button (click)="toggle(o)">
+              <mat-icon>{{ expandedId() === o.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="orderNumber">
+          <th mat-header-cell *matHeaderCellDef>Order #</th>
+          <td mat-cell *matCellDef="let o">{{ o.orderNumber }}</td>
+        </ng-container>
+        <ng-container matColumnDef="customer">
+          <th mat-header-cell *matHeaderCellDef>Customer</th>
+          <td mat-cell *matCellDef="let o">{{ o.customerName }}</td>
+        </ng-container>
+        <ng-container matColumnDef="orderDate">
+          <th mat-header-cell *matHeaderCellDef>Order Date</th>
+          <td mat-cell *matCellDef="let o">{{ o.orderDate | date:'mediumDate' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="delivery">
+          <th mat-header-cell *matHeaderCellDef>Delivery</th>
+          <td mat-cell *matCellDef="let o">{{ o.deliveryDate ? (o.deliveryDate | date:'mediumDate') : '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let o">
+            <button mat-button [matMenuTriggerFor]="stMenu">
+              <span [class]="statusChipClass(o.status)">{{ orderStatusLabel[o.status] }}</span>
+              <mat-icon>arrow_drop_down</mat-icon>
+            </button>
+            <mat-menu #stMenu="matMenu">
+              @for (s of statusOptions; track s.value) {
+                <button mat-menu-item (click)="changeStatus(o, s.value)">{{ s.label }}</button>
+              }
+            </mat-menu>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="payment">
+          <th mat-header-cell *matHeaderCellDef>Payment</th>
+          <td mat-cell *matCellDef="let o"><span [class]="payChipClass(o.paymentStatus)">{{ paymentStatusLabel[o.paymentStatus] }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="total">
+          <th mat-header-cell *matHeaderCellDef>Total</th>
+          <td mat-cell *matCellDef="let o">{{ o.totalAmount | currency:'INR' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="remaining">
+          <th mat-header-cell *matHeaderCellDef>Remaining</th>
+          <td mat-cell *matCellDef="let o">{{ o.remainingAmount | currency:'INR' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let o">
+            <button mat-icon-button matTooltip="Payments" (click)="managePayments(o)"><mat-icon>payments</mat-icon></button>
+            <button mat-icon-button (click)="edit(o)"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button (click)="remove(o)"><mat-icon>delete</mat-icon></button>
+          </td>
+        </ng-container>
+
+        <!-- Expanded detail row: items + received status -->
+        <ng-container matColumnDef="detail">
+          <td mat-cell *matCellDef="let o" [attr.colspan]="columns.length">
+            <div class="detail" [class.open]="expandedId() === o.id">
+              @if (expandedId() === o.id) {
+                <h4>Items — mark received status</h4>
+                @if (o.notes) { <p class="notes">Notes: {{ o.notes }}</p> }
+                <table class="items-table">
+                  <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Line Total</th><th>Received</th></tr></thead>
+                  <tbody>
+                    @for (it of o.items; track it.id) {
+                      <tr>
+                        <td>{{ it.itemName }}</td>
+                        <td>{{ it.quantity }}</td>
+                        <td>{{ it.unitPrice | currency:'INR' }}</td>
+                        <td>{{ it.lineTotal | currency:'INR' }}</td>
+                        <td>
+                          <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:150px">
+                            <mat-select [ngModel]="it.receivedStatus" (ngModelChange)="changeReceived(o, it.id, $event)">
+                              @for (r of receivedOptions; track r.value) { <mat-option [value]="r.value">{{ r.label }}</mat-option> }
+                            </mat-select>
+                          </mat-form-field>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: ['detail']" class="detail-row"></tr>
+      </table>
+      @if (!pager.total()) {
+        @if (hasFilters()) {
+          <div class="empty">No orders match the selected filters.</div>
+        } @else {
+          <div class="empty">No orders yet. Click "New Order".</div>
+        }
+      }
+      <mat-paginator [length]="pager.total()" [pageSize]="pager.pageSize()" [pageIndex]="pager.pageIndex()"
+        [pageSizeOptions]="pageSizeOptions" (page)="pager.onPage($event)" showFirstLastButtons />
+    </mat-card-content>
+  </mat-card>
+</div>

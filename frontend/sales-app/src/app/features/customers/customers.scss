@@ -1,0 +1,9 @@
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.info-grid .k { color: var(--mat-sys-on-surface-variant); font-weight: 600; margin-right: 4px; }
+.detail-card mat-card-header { display: flex; align-items: center; }
+h3 { margin: 16px 0 8px; }

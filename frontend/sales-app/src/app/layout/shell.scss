@@ -1,0 +1,29 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;        // fill the viewport exactly
+  overflow: hidden;     // prevent body-level scroll; scrolling happens inside content
+}
+
+.topbar {
+  flex: 0 0 auto;       // fixed-height toolbar
+  z-index: 10;
+}
+.brand { font-weight: 600; margin-left: 8px; }
+.spacer { flex: 1 1 auto; }
+.username { margin: 0 4px; }
+
+.container {
+  flex: 1 1 auto;       // take all remaining height below the toolbar
+  min-height: 0;        // allow the inner scroll area to shrink/scroll correctly
+}
+.sidenav {
+  width: 240px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+}
+.content {
+  padding: 24px;        // mat-sidenav-content scrolls internally
+}
+a.active {
+  background: var(--mat-sys-secondary-container);
+}

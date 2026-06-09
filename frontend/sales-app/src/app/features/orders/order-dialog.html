@@ -1,0 +1,77 @@
+<h2 mat-dialog-title>{{ isEdit ? 'Edit Order' : 'New Order' }}</h2>
+<mat-dialog-content>
+  <div class="dialog-form">
+    <div class="row">
+      <mat-form-field appearance="fill" style="flex:1; min-width:240px">
+        <mat-label>Customer</mat-label>
+        <mat-select [ngModel]="customerId()" (ngModelChange)="customerId.set($event)" #custCtrl="ngModel" required>
+          @for (c of data.customers; track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
+        </mat-select>
+        @if (custCtrl.hasError('required')) { <mat-error>Customer is required</mat-error> }
+      </mat-form-field>
+      <mat-form-field appearance="fill">
+        <mat-label>Delivery Date</mat-label>
+        <input matInput [matDatepicker]="picker" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)" />
+        <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="fill" style="flex:1; min-width:220px">
+        <mat-label>Add Item</mat-label>
+        <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)">
+          @for (i of data.items; track i.id) {
+            <mat-option [value]="i.id">{{ i.name }} ({{ i.unitPrice | currency:'INR' }})</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="fill" style="width:110px">
+        <mat-label>Qty</mat-label>
+        <input matInput type="number" min="1" [ngModel]="qty()" (ngModelChange)="qty.set($event)" />
+      </mat-form-field>
+      <button mat-stroked-button color="primary" (click)="addLine()"><mat-icon>add</mat-icon> Add</button>
+    </div>
+
+    <table mat-table [dataSource]="lines()" class="full">
+      <ng-container matColumnDef="item">
+        <th mat-header-cell *matHeaderCellDef>Item</th>
+        <td mat-cell *matCellDef="let l">{{ l.itemName }}</td>
+      </ng-container>
+      <ng-container matColumnDef="qty">
+        <th mat-header-cell *matHeaderCellDef>Qty</th>
+        <td mat-cell *matCellDef="let l">
+          <input type="number" min="1" [ngModel]="l.quantity" (ngModelChange)="updateQty(l.itemId, $event)" style="width:64px" />
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="price">
+        <th mat-header-cell *matHeaderCellDef>Unit Price</th>
+        <td mat-cell *matCellDef="let l">
+          <input type="number" min="0" [ngModel]="l.unitPrice" (ngModelChange)="updatePrice(l.itemId, $event)" style="width:90px" />
+        </td>
+      </ng-container>
+      <ng-container matColumnDef="total">
+        <th mat-header-cell *matHeaderCellDef>Total</th>
+        <td mat-cell *matCellDef="let l">{{ (l.quantity * l.unitPrice) | currency:'INR' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let l"><button mat-icon-button (click)="removeLine(l.itemId)"><mat-icon>close</mat-icon></button></td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+    </table>
+    @if (!lines().length) { <div class="req-msg">At least one item is required.</div> }
+
+    <div class="total-row">Total: {{ total() | currency:'INR' }}</div>
+
+    <mat-form-field appearance="fill" class="full">
+      <mat-label>Notes</mat-label>
+      <input matInput [ngModel]="notes()" (ngModelChange)="notes.set($event)" />
+    </mat-form-field>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-flat-button color="primary" [disabled]="!canSave()" (click)="save()">Save Order</button>
+</mat-dialog-actions>

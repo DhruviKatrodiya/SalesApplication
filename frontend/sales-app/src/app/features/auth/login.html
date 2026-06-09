@@ -1,0 +1,38 @@
+<mat-card class="auth-card">
+  @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
+  <mat-card-content>
+    <div class="brand-row">
+      <mat-icon color="primary">point_of_sale</mat-icon>
+      <h1 class="auth-title">Sales App</h1>
+    </div>
+    <p class="auth-subtitle">Sign in to your account</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <mat-form-field appearance="fill" class="full">
+        <mat-label>Email</mat-label>
+        <input matInput type="email" formControlName="email" autocomplete="username" required />
+        <mat-icon matSuffix>email</mat-icon>
+        @if (form.controls.email.hasError('required')) { <mat-error>Email is required</mat-error> }
+        @if (form.controls.email.hasError('email')) { <mat-error>Enter a valid email</mat-error> }
+      </mat-form-field>
+
+      <mat-form-field appearance="fill" class="full">
+        <mat-label>Password</mat-label>
+        <input matInput [type]="hidePassword() ? 'password' : 'text'" formControlName="password" autocomplete="current-password" required />
+        <button mat-icon-button matSuffix type="button" (click)="hidePassword.set(!hidePassword())"
+                [attr.aria-label]="'Toggle password visibility'" [attr.aria-pressed]="!hidePassword()">
+          <mat-icon>{{ hidePassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+        @if (form.controls.password.hasError('required')) { <mat-error>Password is required</mat-error> }
+      </mat-form-field>
+
+      <div class="actions">
+        <button mat-flat-button color="primary" type="submit" [disabled]="loading()">Login</button>
+      </div>
+    </form>
+
+    <div class="links">
+      <a routerLink="/forgot-password">Forgot password?</a>
+    </div>
+  </mat-card-content>
+</mat-card>

@@ -1,0 +1,103 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Customers</h1>
+    <button mat-flat-button color="primary" (click)="add()"><mat-icon>person_add</mat-icon> Add Customer</button>
+  </div>
+
+  <mat-card class="table-card">
+    <mat-card-content>
+      <div class="row" style="margin-bottom:12px">
+        <mat-form-field appearance="fill" style="flex:1; min-width:260px">
+          <mat-label>Search customer (e.g. "ABC")</mat-label>
+          <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)" (keyup.enter)="onSearch()"
+                 placeholder="name, phone, or email" />
+          <button mat-icon-button matSuffix (click)="onSearch()"><mat-icon>search</mat-icon></button>
+        </mat-form-field>
+      </div>
+
+      <table mat-table [dataSource]="pager.paged()">
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let c">{{ c.name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="phone">
+          <th mat-header-cell *matHeaderCellDef>Phone</th>
+          <td mat-cell *matCellDef="let c">{{ c.phone }}</td>
+        </ng-container>
+        <ng-container matColumnDef="email">
+          <th mat-header-cell *matHeaderCellDef>Email</th>
+          <td mat-cell *matCellDef="let c">{{ c.email }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let c">
+            <button mat-stroked-button color="primary" (click)="viewDetails(c)"><mat-icon>visibility</mat-icon> Details</button>
+            <button mat-icon-button (click)="edit(c)"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button (click)="remove(c)"><mat-icon>delete</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+      @if (!customers().length) { <div class="empty">No customers found.</div> }
+      <mat-paginator [length]="pager.total()" [pageSize]="pager.pageSize()" [pageIndex]="pager.pageIndex()"
+        [pageSizeOptions]="pageSizeOptions" (page)="pager.onPage($event)" showFirstLastButtons />
+    </mat-card-content>
+  </mat-card>
+
+  @if (detail(); as d) {
+    <mat-card class="mt-16 detail-card">
+      <mat-card-header>
+        <mat-card-title>{{ d.customer.name }}</mat-card-title>
+        <span class="spacer"></span>
+        <button mat-icon-button (click)="closeDetails()"><mat-icon>close</mat-icon></button>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="info-grid">
+          <div><span class="k">Phone:</span> {{ d.customer.phone || '-' }}</div>
+          <div><span class="k">Email:</span> {{ d.customer.email || '-' }}</div>
+          <div><span class="k">Address:</span> {{ d.customer.address || '-' }}</div>
+          <div><span class="k">Overall Payment:</span>
+            <span class="chip"
+              [class.chip-paid]="d.overallPaymentStatus === 'Paid'"
+              [class.chip-advance]="d.overallPaymentStatus === 'Advance'"
+              [class.chip-pending]="d.overallPaymentStatus === 'Pending'">{{ d.overallPaymentStatus }}</span>
+          </div>
+        </div>
+
+        <div class="cards-grid mt-16">
+          <mat-card class="stat-card"><mat-card-content><div class="value">{{ d.totalOrdered | currency:'INR':'symbol':'1.0-0' }}</div><div class="label">Total Ordered</div></mat-card-content></mat-card>
+          <mat-card class="stat-card"><mat-card-content><div class="value">{{ d.totalPaid | currency:'INR':'symbol':'1.0-0' }}</div><div class="label">Total Paid</div></mat-card-content></mat-card>
+          <mat-card class="stat-card"><mat-card-content><div class="value">{{ d.totalRemaining | currency:'INR':'symbol':'1.0-0' }}</div><div class="label">Remaining</div></mat-card-content></mat-card>
+          <mat-card class="stat-card"><mat-card-content><div class="value">{{ d.pendingOrders }}</div><div class="label">Pending Orders</div></mat-card-content></mat-card>
+          <mat-card class="stat-card"><mat-card-content><div class="value">{{ d.deliveredOrders }}</div><div class="label">Delivered Orders</div></mat-card-content></mat-card>
+        </div>
+
+        <h3 class="mt-16">Orders &amp; Items</h3>
+        <mat-accordion>
+          @for (o of d.orders; track o.id) {
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                <mat-panel-title>{{ o.orderNumber }}</mat-panel-title>
+                <mat-panel-description>
+                  <span [class]="statusChipClass(o.status)">{{ orderStatusLabel[o.status] }}</span>
+                  <span [class]="payChipClass(o.paymentStatus)" style="margin-left:8px">{{ paymentStatusLabel[o.paymentStatus] }}</span>
+                  <span style="margin-left:auto">{{ o.totalAmount | currency:'INR' }}</span>
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+              <table mat-table [dataSource]="o.items" class="full">
+                <ng-container matColumnDef="item"><th mat-header-cell *matHeaderCellDef>Item</th><td mat-cell *matCellDef="let it">{{ it.itemName }}</td></ng-container>
+                <ng-container matColumnDef="qty"><th mat-header-cell *matHeaderCellDef>Qty</th><td mat-cell *matCellDef="let it">{{ it.quantity }}</td></ng-container>
+                <ng-container matColumnDef="price"><th mat-header-cell *matHeaderCellDef>Price</th><td mat-cell *matCellDef="let it">{{ it.unitPrice | currency:'INR' }}</td></ng-container>
+                <ng-container matColumnDef="line"><th mat-header-cell *matHeaderCellDef>Total</th><td mat-cell *matCellDef="let it">{{ it.lineTotal | currency:'INR' }}</td></ng-container>
+                <tr mat-header-row *matHeaderRowDef="['item','qty','price','line']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['item','qty','price','line']"></tr>
+              </table>
+            </mat-expansion-panel>
+          }
+        </mat-accordion>
+        @if (!d.orders.length) { <div class="empty">No orders for this customer.</div> }
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

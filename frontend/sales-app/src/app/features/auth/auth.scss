@@ -1,0 +1,29 @@
+:host {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--mat-sys-primary-container), var(--mat-sys-surface));
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px;
+}
+.auth-title {
+  text-align: center;
+  margin: 8px 0 4px;
+}
+.auth-subtitle {
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 16px;
+}
+form { display: flex; flex-direction: column; }
+.full { width: 100%; }
+.actions { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.error { color: var(--mat-sys-error); text-align: center; margin: 8px 0; }
+.links { text-align: center; margin-top: 12px; }
+.links a { color: var(--mat-sys-primary); text-decoration: none; }
+.brand-row { display: flex; align-items: center; justify-content: center; gap: 8px; }

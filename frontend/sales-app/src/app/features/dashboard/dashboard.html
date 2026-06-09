@@ -1,0 +1,59 @@
+<div class="page">
+  <h1>Dashboard</h1>
+
+  <div class="cards-grid">
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon color="primary">inventory_2</mat-icon>
+        <div class="value">{{ items().length }}</div>
+        <div class="label">Items in Catalog</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon style="color:#c62828">warning</mat-icon>
+        <div class="value">{{ lowStockCount() }}</div>
+        <div class="label">Low Stock (&le; 10)</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon color="primary">people</mat-icon>
+        <div class="value">{{ customers().length }}</div>
+        <div class="label">Customers</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon style="color:#ef6c00">pending_actions</mat-icon>
+        <div class="value">{{ pendingOrders() }}</div>
+        <div class="label">Pending Orders</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon color="primary">payments</mat-icon>
+        <div class="value">{{ totalSales() | currency:'INR':'symbol':'1.0-0' }}</div>
+        <div class="label">Total Sales</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="stat-card">
+      <mat-card-content>
+        <mat-icon style="color:#c62828">account_balance_wallet</mat-icon>
+        <div class="value">{{ totalRemaining() | currency:'INR':'symbol':'1.0-0' }}</div>
+        <div class="label">Outstanding Balance</div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <div class="row mt-16">
+    <button mat-flat-button color="primary" routerLink="/orders"><mat-icon>add</mat-icon> New Order</button>
+    <button mat-stroked-button routerLink="/dispatch"><mat-icon>local_shipping</mat-icon> Dispatch Truck</button>
+    <button mat-stroked-button routerLink="/customers"><mat-icon>person_add</mat-icon> Add Customer</button>
+  </div>
+</div>

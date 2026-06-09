@@ -1,0 +1,72 @@
+<h2 mat-dialog-title>Payments — {{ order().orderNumber }}</h2>
+<mat-dialog-content>
+  <div class="dialog-form">
+    <div class="summary">
+      <div>Total: <span>{{ order().totalAmount | currency:'INR' }}</span></div>
+      <div>Paid: <span>{{ order().paidAmount | currency:'INR' }}</span></div>
+      <div>Remaining: <span>{{ order().remainingAmount | currency:'INR' }}</span></div>
+      <div>Status:
+        <span class="chip"
+          [class.chip-paid]="order().paymentStatus === 2"
+          [class.chip-advance]="order().paymentStatus === 1"
+          [class.chip-pending]="order().paymentStatus === 0">{{ payLabel[order().paymentStatus] }}</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="fill" style="width:140px">
+        <mat-label>Amount</mat-label>
+        <input matInput type="number" min="0" [ngModel]="amount()" (ngModelChange)="amount.set($event)" />
+      </mat-form-field>
+      <mat-form-field appearance="fill" style="width:140px">
+        <mat-label>Method</mat-label>
+        <mat-select [ngModel]="method()" (ngModelChange)="method.set($event)">
+          <mat-option value="Cash">Cash</mat-option>
+          <mat-option value="UPI">UPI</mat-option>
+          <mat-option value="Bank">Bank</mat-option>
+          <mat-option value="Cheque">Cheque</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="fill" style="flex:1; min-width:140px">
+        <mat-label>Note</mat-label>
+        <input matInput [ngModel]="note()" (ngModelChange)="note.set($event)" />
+      </mat-form-field>
+    </div>
+
+    <div class="actions-row">
+      <button mat-flat-button color="primary" (click)="addPayment()"><mat-icon>add</mat-icon> Add Payment</button>
+      <button mat-stroked-button color="primary" (click)="settle()" [disabled]="order().remainingAmount <= 0">
+        <mat-icon>done_all</mat-icon> Mark Fully Settled
+      </button>
+    </div>
+
+    <table mat-table [dataSource]="payments()" class="full">
+      <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef>Date</th>
+        <td mat-cell *matCellDef="let p">{{ p.paymentDate | date:'mediumDate' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="amount">
+        <th mat-header-cell *matHeaderCellDef>Amount</th>
+        <td mat-cell *matCellDef="let p">{{ p.amount | currency:'INR' }}</td>
+      </ng-container>
+      <ng-container matColumnDef="method">
+        <th mat-header-cell *matHeaderCellDef>Method</th>
+        <td mat-cell *matCellDef="let p">{{ p.method }}</td>
+      </ng-container>
+      <ng-container matColumnDef="note">
+        <th mat-header-cell *matHeaderCellDef>Note</th>
+        <td mat-cell *matCellDef="let p">{{ p.note }}</td>
+      </ng-container>
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let p"><button mat-icon-button (click)="deletePayment(p)"><mat-icon>delete</mat-icon></button></td>
+      </ng-container>
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+    </table>
+    @if (!payments().length) { <div class="empty">No payments recorded yet.</div> }
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-flat-button color="primary" (click)="close()">Done</button>
+</mat-dialog-actions>

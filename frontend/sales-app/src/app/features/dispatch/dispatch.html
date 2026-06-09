@@ -1,0 +1,100 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Dispatch from Godown (Truck)</h1>
+  </div>
+
+  <mat-card class="mt-16">
+    <mat-card-header><mat-card-title>New Dispatch</mat-card-title></mat-card-header>
+    <mat-card-content>
+      <div class="row">
+        <mat-form-field appearance="fill">
+          <mat-label>Truck</mat-label>
+          <input matInput [ngModel]="truckLabel()" (ngModelChange)="truckLabel.set($event)" />
+        </mat-form-field>
+        <mat-form-field appearance="fill" style="flex:1; min-width:220px">
+          <mat-label>Item</mat-label>
+          <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)">
+            @for (i of items(); track i.id) {
+              <mat-option [value]="i.id">{{ i.name }} (stock: {{ i.stockQuantity }})</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="fill" style="width:120px">
+          <mat-label>Qty</mat-label>
+          <input matInput type="number" min="1" [ngModel]="qty()" (ngModelChange)="qty.set($event)" />
+        </mat-form-field>
+        <button mat-stroked-button color="primary" (click)="addToCart()"><mat-icon>add</mat-icon> Add</button>
+      </div>
+
+      <table mat-table [dataSource]="cart()" class="mt-16">
+        <ng-container matColumnDef="item">
+          <th mat-header-cell *matHeaderCellDef>Item</th>
+          <td mat-cell *matCellDef="let c">{{ c.itemName }}</td>
+        </ng-container>
+        <ng-container matColumnDef="available">
+          <th mat-header-cell *matHeaderCellDef>Available</th>
+          <td mat-cell *matCellDef="let c">{{ c.available }}</td>
+        </ng-container>
+        <ng-container matColumnDef="qty">
+          <th mat-header-cell *matHeaderCellDef>Dispatch Qty</th>
+          <td mat-cell *matCellDef="let c">
+            <span [style.color]="c.quantity > c.available ? 'var(--mat-sys-error)' : 'inherit'">{{ c.quantity }}</span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let c">
+            <button mat-icon-button (click)="removeLine(c.itemId)"><mat-icon>close</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="cartColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: cartColumns"></tr>
+      </table>
+      @if (!cart().length) { <div class="empty">No items added to this dispatch yet.</div> }
+
+      <mat-form-field appearance="fill" class="full mt-16">
+        <mat-label>Notes</mat-label>
+        <input matInput [ngModel]="notes()" (ngModelChange)="notes.set($event)" />
+      </mat-form-field>
+
+      @if (hasStockIssue()) {
+        <p style="color: var(--mat-sys-error)">Some lines exceed available stock. Reduce quantities.</p>
+      }
+
+      <button mat-flat-button color="primary" (click)="dispatch()" [disabled]="!cart().length || hasStockIssue()">
+        <mat-icon>local_shipping</mat-icon> Record Dispatch
+      </button>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="table-card mt-16">
+    <mat-card-header><mat-card-title>Dispatch History</mat-card-title></mat-card-header>
+    <mat-card-content>
+      <table mat-table [dataSource]="historyPager.paged()">
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let d">{{ d.dispatchDate | date:'medium' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="truck">
+          <th mat-header-cell *matHeaderCellDef>Truck</th>
+          <td mat-cell *matCellDef="let d">{{ d.truckLabel }}</td>
+        </ng-container>
+        <ng-container matColumnDef="items">
+          <th mat-header-cell *matHeaderCellDef>Items</th>
+          <td mat-cell *matCellDef="let d">
+            @for (it of d.items; track it.itemId) { <span class="chip chip-ok" style="margin:2px">{{ it.itemName }} × {{ it.quantity }}</span> }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="notes">
+          <th mat-header-cell *matHeaderCellDef>Notes</th>
+          <td mat-cell *matCellDef="let d">{{ d.notes }}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="historyColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: historyColumns"></tr>
+      </table>
+      @if (!history().length) { <div class="empty">No dispatches recorded yet.</div> }
+      <mat-paginator [length]="historyPager.total()" [pageSize]="historyPager.pageSize()" [pageIndex]="historyPager.pageIndex()"
+        [pageSizeOptions]="pageSizeOptions" (page)="historyPager.onPage($event)" showFirstLastButtons />
+    </mat-card-content>
+  </mat-card>
+</div>

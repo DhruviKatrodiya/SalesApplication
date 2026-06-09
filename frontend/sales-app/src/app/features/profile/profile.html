@@ -1,0 +1,53 @@
+<div class="page">
+  <h1>My Profile</h1>
+  <mat-card class="form-card">
+    <mat-card-content>
+      <form [formGroup]="form" (ngSubmit)="save()">
+        <mat-form-field appearance="fill" class="full">
+          <mat-label>Full Name</mat-label>
+          <input matInput formControlName="fullName" required />
+          <mat-icon matSuffix>person</mat-icon>
+          @if (form.controls.fullName.hasError('required')) { <mat-error>Full name is required</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="full">
+          <mat-label>Email</mat-label>
+          <input matInput type="email" formControlName="email" required />
+          <mat-icon matSuffix>email</mat-icon>
+          <mat-hint>Used to sign in — you'll log in with this email after saving</mat-hint>
+          @if (form.controls.email.hasError('required')) { <mat-error>Email is required</mat-error> }
+          @if (form.controls.email.hasError('email')) { <mat-error>Enter a valid email</mat-error> }
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="full">
+          <mat-label>Phone</mat-label>
+          <input matInput formControlName="phone" />
+          <mat-icon matSuffix>phone</mat-icon>
+        </mat-form-field>
+
+        <label class="mat-mdc-form-field-label" style="display:block; color: var(--mat-sys-on-surface-variant); margin: 4px 0;">Profile Image</label>
+        <div class="avatar-row">
+          <div class="avatar">
+            @if (form.controls.profileImagePath.value) {
+              <img [src]="form.controls.profileImagePath.value" alt="Profile image" />
+            } @else {
+              <mat-icon>account_circle</mat-icon>
+            }
+          </div>
+          <div class="avatar-actions">
+            <input type="file" #fileInput accept="image/*" hidden (change)="onFileSelected($event)" />
+            <button mat-stroked-button color="primary" type="button" (click)="fileInput.click()" [disabled]="uploading()">
+              <mat-icon>upload</mat-icon> {{ uploading() ? 'Uploading…' : 'Upload Image' }}
+            </button>
+            @if (form.controls.profileImagePath.value) {
+              <button mat-button type="button" (click)="clearImage()"><mat-icon>delete</mat-icon> Remove</button>
+            }
+            <span class="hint">PNG, JPG, GIF or WEBP, up to 5 MB.</span>
+          </div>
+        </div>
+
+        <button mat-flat-button color="primary" type="submit" [disabled]="saving()">Save Changes</button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>

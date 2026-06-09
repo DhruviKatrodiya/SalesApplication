@@ -1,0 +1,16 @@
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+}
+mat-card-header {
+  display: flex;
+  align-items: center;
+  padding-top: 12px;
+}
+.clickable { cursor: pointer; }
+tr.selected { background: var(--mat-sys-secondary-container); }
+.muted { color: var(--mat-sys-on-surface-variant); font-weight: 400; font-size: 0.9em; }
