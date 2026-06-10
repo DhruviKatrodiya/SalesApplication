@@ -36,4 +36,30 @@ export function createPager<T>(source: () => T[], initialSize = 5) {
   return { pageIndex, pageSize, total, paged, onPage, reset };
 }
 
+/**
+ * Server-side pager: the component fetches one page at a time from the API.
+ * Holds page index/size and the server-reported total, and invokes `reload`
+ * whenever the user changes page or page size.
+ *
+ * Usage:
+ *   pager = createServerPager(() => this.load());
+ *   // after each fetch: pager.total.set(res.total) and bind the table to the page items
+ *   // template: [dataSource]="items()" with a <mat-paginator [length]="pager.total()" ...>
+ */
+export function createServerPager(reload: () => void, initialSize = 5) {
+  const pageIndex = signal(0);
+  const pageSize = signal(initialSize);
+  const total = signal(0);
+
+  const onPage = (e: PageEvent) => {
+    pageIndex.set(e.pageIndex);
+    pageSize.set(e.pageSize);
+    reload();
+  };
+
+  const reset = () => pageIndex.set(0);
+
+  return { pageIndex, pageSize, total, onPage, reset };
+}
+
 export const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];

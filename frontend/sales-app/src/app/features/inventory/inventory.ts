@@ -15,7 +15,7 @@ import { ApiService } from '../../core/api.service';
 import { Item, SubCategory } from '../../core/models';
 import { ItemDialog } from './item-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
-import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-inventory',
@@ -23,42 +23,64 @@ import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
     FormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatCheckboxModule, MatPaginatorModule
   ],
-  templateUrl: './inventory.html'
+  templateUrl: './inventory.html',
+  styles: `
+    .search-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .search-grid mat-form-field { width: 100%; }
+  `
 })
 export class Inventory implements OnInit {
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
 
-  allItems = signal<Item[]>([]);
+  items = signal<Item[]>([]);    // server-filtered list (current page is sliced client-side)
   subCategories = signal<SubCategory[]>([]);
-  filter = signal('');
-  lowOnly = signal(false);
+  categoryFilter = signal('');   // category / sub-category name
+  itemFilter = signal('');       // item name
+  skuFilter = signal('');        // SKU
+  lowOnly = signal(false);       // stock <= 10
 
-  columns = ['name', 'category', 'sku', 'unit', 'stock', 'price', 'actions'];
+  columns = ['srNo', 'name', 'category', 'sku', 'unit', 'stock', 'dispatchStock', 'price', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
-  pager = createPager(() => this.filtered());
+  pager = createServerPager(() => this.load());
 
-  setFilter(v: string) { this.filter.set(v); this.pager.reset(); }
-  setLowOnly(v: boolean) { this.lowOnly.set(v); this.pager.reset(); }
+  setCategoryFilter(v: string) { this.categoryFilter.set(v); this.reload(); }
+  setItemFilter(v: string) { this.itemFilter.set(v); this.reload(); }
+  setSkuFilter(v: string) { this.skuFilter.set(v); this.reload(); }
+  setLowOnly(v: boolean) { this.lowOnly.set(v); this.reload(); }
+
+  private reload() { this.pager.reset(); this.load(); }
 
   ngOnInit() {
     this.load();
-    this.api.getSubCategories().subscribe(s => this.subCategories.set(s));
+    this.api.getAllSubCategories().subscribe(s => this.subCategories.set(s));
   }
 
-  load() { this.api.getItems().subscribe(list => this.allItems.set(list)); }
-
-  filtered(): Item[] {
-    const term = this.filter().trim().toLowerCase();
-    return this.allItems().filter(i => {
-      if (this.lowOnly() && i.stockQuantity > 10) return false;
-      if (!term) return true;
-      return i.name.toLowerCase().includes(term)
-        || (i.sku ?? '').toLowerCase().includes(term)
-        || i.categoryName.toLowerCase().includes(term)
-        || i.subCategoryName.toLowerCase().includes(term);
+  load() {
+    this.api.getItems({
+      category: this.categoryFilter() || undefined,
+      item: this.itemFilter() || undefined,
+      sku: this.skuFilter() || undefined,
+      lowStock: this.lowOnly() || undefined,
+      page: this.pager.pageIndex() + 1,
+      pageSize: this.pager.pageSize(),
+    }).subscribe(res => {
+      // Step back if deletions/filters emptied the current page.
+      const maxIndex = Math.max(0, Math.ceil(res.total / this.pager.pageSize()) - 1);
+      if (this.pager.pageIndex() > maxIndex) {
+        this.pager.pageIndex.set(maxIndex);
+        this.load();
+        return;
+      }
+      this.items.set(res.items);
+      this.pager.total.set(res.total);
     });
   }
 

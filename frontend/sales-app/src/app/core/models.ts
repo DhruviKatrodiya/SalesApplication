@@ -2,6 +2,7 @@
 export enum OrderStatus { Pending = 0, Dispatched = 1, Delivered = 2, Completed = 3, Remaining = 4 }
 export enum PaymentStatus { Pending = 0, Advance = 1, Paid = 2 }
 export enum ReceivedStatus { Pending = 0, Remaining = 1, Completed = 2 }
+export enum OrderSource { Inventory = 0, Dispatch = 1 }
 
 export const OrderStatusLabels: Record<number, string> = {
   0: 'Pending', 1: 'Dispatched', 2: 'Delivered', 3: 'Completed', 4: 'Remaining'
@@ -23,6 +24,13 @@ export interface User {
 }
 export interface LoginResponse { token: string; user: User; }
 
+// ---- Pagination ----
+export interface PagedResult<T> { items: T[]; total: number; page: number; pageSize: number; }
+
+// ---- Dispatch draft (unsaved cart); each line carries its truck ----
+export interface DispatchDraftItem { itemId: number; quantity: number; truckLabel?: string | null; }
+export interface DispatchDraft { truckLabel?: string | null; notes?: string | null; items: DispatchDraftItem[]; }
+
 // ---- Catalog ----
 export interface Category { id: number; name: string; description?: string; subCategoryCount: number; }
 export interface SubCategory {
@@ -30,7 +38,7 @@ export interface SubCategory {
 }
 export interface Item {
   id: number; subCategoryId: number; subCategoryName: string; categoryName: string;
-  name: string; sku?: string; unit?: string; stockQuantity: number; unitPrice: number;
+  name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number;
 }
 
 // ---- Dispatch ----
@@ -40,8 +48,10 @@ export interface Dispatch {
 }
 
 // ---- Customers ----
+export interface Route { id: number; name: string; description?: string; customerCount: number; }
 export interface Customer {
-  id: number; name: string; phone?: string; email?: string; address?: string; createdAt: string;
+  id: number; name: string; phone?: string; email?: string; address?: string;
+  routeId?: number | null; routeName?: string | null; createdAt: string;
 }
 export interface CustomerSearchResult {
   customer: Customer;
@@ -59,7 +69,7 @@ export interface OrderItem {
 export interface Order {
   id: number; orderNumber: string; customerId: number; customerName: string;
   orderDate: string; deliveryDate?: string;
-  status: OrderStatus; paymentStatus: PaymentStatus;
+  status: OrderStatus; paymentStatus: PaymentStatus; source: OrderSource;
   totalAmount: number; paidAmount: number; remainingAmount: number;
   notes?: string; items: OrderItem[];
 }

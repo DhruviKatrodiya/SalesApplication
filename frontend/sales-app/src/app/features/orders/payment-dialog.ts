@@ -41,7 +41,7 @@ export class PaymentDialog implements OnInit {
   note = signal<string>('');
   changed = false;
 
-  columns = ['date', 'amount', 'method', 'note', 'actions'];
+  columns = ['srNo', 'date', 'amount', 'method', 'note', 'actions'];
   payLabel = PaymentStatusLabels;
 
   ngOnInit() { this.loadPayments(); }

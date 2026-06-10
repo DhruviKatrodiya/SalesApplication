@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<SubCategory> SubCategories => Set<SubCategory>();
     public DbSet<Item> Items => Set<Item>();
     public DbSet<Customer> Customers => Set<Customer>();
+    public DbSet<DeliveryRoute> Routes => Set<DeliveryRoute>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Payment> Payments => Set<Payment>();
@@ -18,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<DispatchItem> DispatchItems => Set<DispatchItem>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
+    public DbSet<DispatchDraft> DispatchDrafts => Set<DispatchDraft>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -36,6 +38,7 @@ public class AppDbContext : DbContext
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
         b.Entity<Order>().HasIndex(x => x.OrderNumber).IsUnique();
         b.Entity<PasswordResetOtp>().HasIndex(x => x.Email);
+        b.Entity<DispatchDraft>().HasIndex(x => x.UserId).IsUnique();   // one draft per user (each line carries its truck)
 
         // Relationships
         b.Entity<SubCategory>()
@@ -49,6 +52,12 @@ public class AppDbContext : DbContext
         b.Entity<Order>()
             .HasOne(x => x.Customer).WithMany(x => x.Orders)
             .HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+
+        // A customer optionally belongs to a delivery route; deleting a route
+        // just unassigns its customers (sets RouteId to null).
+        b.Entity<Customer>()
+            .HasOne(x => x.Route).WithMany(r => r.Customers)
+            .HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.SetNull);
 
         b.Entity<OrderItem>()
             .HasOne(x => x.Order).WithMany(x => x.Items)

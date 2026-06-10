@@ -22,3 +22,10 @@ public enum ReceivedStatus
     Remaining = 1,
     Completed = 2
 }
+
+/// <summary>How an order's stock is fulfilled when it is created.</summary>
+public enum OrderSource
+{
+    Inventory = 0,   // deduct from inventory/godown stock only
+    Dispatch = 1     // deduct stock AND log a truck dispatch
+}

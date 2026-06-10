@@ -38,8 +38,8 @@ export class Reports implements OnInit {
     { v: 9, n: 'September' }, { v: 10, n: 'October' }, { v: 11, n: 'November' }, { v: 12, n: 'December' }
   ];
 
-  rowColumns = ['label', 'orders', 'total', 'paid', 'remaining'];
-  custColumns = ['customer', 'orders', 'pending', 'delivered', 'total', 'paid', 'remaining'];
+  rowColumns = ['srNo', 'label', 'orders', 'total', 'paid', 'remaining'];
+  custColumns = ['srNo', 'customer', 'orders', 'pending', 'delivered', 'total', 'paid', 'remaining'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   rowsPager = createPager(() => this.summary()?.rows ?? []);

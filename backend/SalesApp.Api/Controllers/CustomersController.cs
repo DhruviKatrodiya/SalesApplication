@@ -17,24 +17,38 @@ public class CustomersController : ControllerBase
     public CustomersController(AppDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<CustomerDto>>> GetAll([FromQuery] string? query)
+    public async Task<ActionResult<PagedResult<CustomerDto>>> GetAll(
+        [FromQuery] string? name, [FromQuery] string? phone, [FromQuery] int? routeId,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        var q = _db.Customers.AsQueryable();
-        if (!string.IsNullOrWhiteSpace(query))
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
+        var q = _db.Customers.Include(c => c.Route).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(name))
         {
-            var term = query.Trim();
-            q = q.Where(c => c.Name.Contains(term)
-                || (c.Phone != null && c.Phone.Contains(term))
-                || (c.Email != null && c.Email.Contains(term)));
+            var t = name.Trim();
+            q = q.Where(c => c.Name.Contains(t));
         }
-        var list = await q.OrderBy(c => c.Name).Select(c => Mappers.ToDto(c)).ToListAsync();
-        return Ok(list);
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            var t = phone.Trim();
+            q = q.Where(c => c.Phone != null && c.Phone.Contains(t));
+        }
+        if (routeId is not null) q = q.Where(c => c.RouteId == routeId);
+
+        var ordered = q.OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id);
+        var total = await ordered.CountAsync();
+        var pageItems = (await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync())
+            .Select(Mappers.ToDto).ToList();
+
+        return Ok(new PagedResult<CustomerDto>(pageItems, total, page, pageSize));
     }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<CustomerDto>> Get(int id)
     {
-        var c = await _db.Customers.FindAsync(id);
+        var c = await _db.Customers.Include(x => x.Route).FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
         return Ok(Mappers.ToDto(c));
     }
@@ -42,22 +56,31 @@ public class CustomersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CustomerDto>> Create(CustomerRequest req)
     {
-        var c = new Customer { Name = req.Name, Phone = req.Phone, Email = req.Email, Address = req.Address };
+        if (req.RouteId is not null && !await _db.Routes.AnyAsync(r => r.Id == req.RouteId))
+            return BadRequest(new MessageResponse("Route not found."));
+
+        var c = new Customer { Name = req.Name, Phone = req.Phone, Email = req.Email, Address = req.Address, RouteId = req.RouteId };
         _db.Customers.Add(c);
         await _db.SaveChangesAsync();
+        await _db.Entry(c).Reference(x => x.Route).LoadAsync();
         return CreatedAtAction(nameof(Get), new { id = c.Id }, Mappers.ToDto(c));
     }
 
     [HttpPut("{id:int}")]
     public async Task<ActionResult<CustomerDto>> Update(int id, CustomerRequest req)
     {
+        if (req.RouteId is not null && !await _db.Routes.AnyAsync(r => r.Id == req.RouteId))
+            return BadRequest(new MessageResponse("Route not found."));
+
         var c = await _db.Customers.FindAsync(id);
         if (c is null) return NotFound();
         c.Name = req.Name;
         c.Phone = req.Phone;
         c.Email = req.Email;
         c.Address = req.Address;
+        c.RouteId = req.RouteId;
         await _db.SaveChangesAsync();
+        await _db.Entry(c).Reference(x => x.Route).LoadAsync();
         return Ok(Mappers.ToDto(c));
     }
 
@@ -78,7 +101,7 @@ public class CustomersController : ControllerBase
     [HttpGet("{id:int}/details")]
     public async Task<ActionResult<CustomerSearchResult>> Details(int id)
     {
-        var c = await _db.Customers.FindAsync(id);
+        var c = await _db.Customers.Include(x => x.Route).FirstOrDefaultAsync(x => x.Id == id);
         if (c is null) return NotFound();
         return Ok(await BuildDetails(c));
     }
@@ -94,10 +117,11 @@ public class CustomersController : ControllerBase
 
         var term = query.Trim();
         var matches = await _db.Customers
+            .Include(c => c.Route)
             .Where(c => c.Name.Contains(term)
                 || (c.Phone != null && c.Phone.Contains(term))
                 || (c.Email != null && c.Email.Contains(term)))
-            .OrderBy(c => c.Name)
+            .OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id)
             .ToListAsync();
 
         var results = new List<CustomerSearchResult>();

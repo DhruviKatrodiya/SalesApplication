@@ -16,13 +16,28 @@ public class CategoriesController : ControllerBase
     public CategoriesController(AppDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<CategoryDto>>> GetAll()
+    public async Task<ActionResult<PagedResult<CategoryDto>>> GetAll(
+        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        var list = await _db.Categories
-            .OrderBy(c => c.Name)
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
+        var query = _db.Categories.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(c => c.Name.Contains(term));
+        }
+
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(c => new CategoryDto(c.Id, c.Name, c.Description, c.SubCategories.Count))
             .ToListAsync();
-        return Ok(list);
+
+        return Ok(new PagedResult<CategoryDto>(items, total, page, pageSize));
     }
 
     [HttpGet("{id:int}")]

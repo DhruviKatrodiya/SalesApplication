@@ -99,3 +99,70 @@ table.mat-mdc-table { width: 100%; }
   color: var(--mat-sys-on-surface-variant);
 }
 
+/* Lay action-column buttons (View / Edit / Delete …) out horizontally in every table. */
+.mat-mdc-table td.mat-column-actions {
+  white-space: nowrap;
+}
+
+/* ---- Responsive / mobile ---- */
+@media (max-width: 768px) {
+  .page { padding-bottom: 24px; }
+  .page-header { gap: 8px; }
+  .page-header h1 { font: var(--mat-sys-title-large); }
+  /* Make the primary page action (e.g. "New Order") span the row on phones. */
+  .page-header > button { width: 100%; }
+
+  /* Wide data tables scroll horizontally inside their card instead of squishing. */
+  .table-card .mat-mdc-card-content,
+  .mat-mdc-card-content:has(table.mat-mdc-table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table.mat-mdc-table { white-space: nowrap; }
+
+  /* Stack filter / search controls full width so they're tappable. */
+  .filters > *,
+  .filters .f-customer,
+  .filters .f-date,
+  .filters .f-status,
+  .filters .f-clear,
+  .row > mat-form-field {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  .filters .f-clear { margin-bottom: 4px; }
+}
+
+/* Near full-screen, compact dialogs on phones. */
+@media (max-width: 599px) {
+  .cdk-overlay-pane.mat-mdc-dialog-panel {
+    max-width: 96vw !important;
+    width: 96vw !important;
+  }
+
+  /* Dialog forms hardcode a desktop min-width (340–480px) that overflows a
+     phone screen — let them shrink to fit instead. */
+  .mat-mdc-dialog-container .dialog-form {
+    min-width: 0 !important;
+    width: 100%;
+  }
+  .mat-mdc-dialog-container .actions-row button { min-width: 0 !important; }
+
+  /* Tighten the dialog chrome so the form itself takes less room. */
+  .mat-mdc-dialog-container .mat-mdc-dialog-title {
+    font-size: 1.2rem;
+    line-height: 1.4;
+    padding: 14px 16px 4px;
+  }
+  .mat-mdc-dialog-container .mat-mdc-dialog-content {
+    padding: 4px 16px;
+    max-height: 70vh;
+    overflow-x: auto;
+  }
+  .mat-mdc-dialog-container .mat-mdc-dialog-actions {
+    padding: 8px 16px 12px;
+    min-height: auto;
+  }
+  .mat-mdc-dialog-content table.mat-mdc-table { white-space: nowrap; }
+}
+

@@ -9,13 +9,25 @@
       <div class="row">
         <mat-form-field appearance="fill">
           <mat-label>Truck</mat-label>
-          <input matInput [ngModel]="truckLabel()" (ngModelChange)="truckLabel.set($event)" />
+          <input matInput [ngModel]="truckLabel()" (ngModelChange)="setTruckLabel($event)" />
         </mat-form-field>
         <mat-form-field appearance="fill" style="flex:1; min-width:220px">
           <mat-label>Item</mat-label>
-          <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)">
-            @for (i of items(); track i.id) {
+          <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)"
+                      (opened)="onItemSelectOpened()" (closed)="itemSearch.set('')">
+            <div class="select-search">
+              <mat-icon class="select-search-icon">search</mat-icon>
+              <input #itemSearchInput type="text" class="select-search-input" placeholder="Search item…"
+                     [value]="itemSearch()"
+                     (input)="itemSearch.set($any($event.target).value)"
+                     (keydown)="$event.stopPropagation()"
+                     (click)="$event.stopPropagation()" />
+            </div>
+            @for (i of filteredDispatchItems(); track i.id) {
               <mat-option [value]="i.id">{{ i.name }} (stock: {{ i.stockQuantity }})</mat-option>
+            }
+            @if (!filteredDispatchItems().length) {
+              <div class="select-empty">{{ itemSearch() ? 'No items found' : 'No items in stock.' }}</div>
             }
           </mat-select>
         </mat-form-field>
@@ -27,6 +39,14 @@
       </div>
 
       <table mat-table [dataSource]="cart()" class="mt-16">
+        <ng-container matColumnDef="srNo">
+          <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+          <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+        </ng-container>
+        <ng-container matColumnDef="truck">
+          <th mat-header-cell *matHeaderCellDef>Truck</th>
+          <td mat-cell *matCellDef="let c"><span class="chip chip-dispatched">{{ c.truckLabel }}</span></td>
+        </ng-container>
         <ng-container matColumnDef="item">
           <th mat-header-cell *matHeaderCellDef>Item</th>
           <td mat-cell *matCellDef="let c">{{ c.itemName }}</td>
@@ -38,13 +58,13 @@
         <ng-container matColumnDef="qty">
           <th mat-header-cell *matHeaderCellDef>Dispatch Qty</th>
           <td mat-cell *matCellDef="let c">
-            <span [style.color]="c.quantity > c.available ? 'var(--mat-sys-error)' : 'inherit'">{{ c.quantity }}</span>
+            <span [style.color]="isLineOverStock(c) ? 'var(--mat-sys-error)' : 'inherit'">{{ c.quantity }}</span>
           </td>
         </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let c">
-            <button mat-icon-button (click)="removeLine(c.itemId)"><mat-icon>close</mat-icon></button>
+            <button mat-icon-button (click)="removeLine(c)"><mat-icon>close</mat-icon></button>
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="cartColumns"></tr>
@@ -54,7 +74,7 @@
 
       <mat-form-field appearance="fill" class="full mt-16">
         <mat-label>Notes</mat-label>
-        <input matInput [ngModel]="notes()" (ngModelChange)="notes.set($event)" />
+        <input matInput [ngModel]="notes()" (ngModelChange)="setNotes($event)" />
       </mat-form-field>
 
       @if (hasStockIssue()) {
@@ -70,7 +90,33 @@
   <mat-card class="table-card mt-16">
     <mat-card-header><mat-card-title>Dispatch History</mat-card-title></mat-card-header>
     <mat-card-content>
-      <table mat-table [dataSource]="historyPager.paged()">
+      <div class="search-grid">
+        <mat-form-field appearance="fill" subscriptSizing="dynamic">
+          <mat-label>Truck</mat-label>
+          <input matInput [ngModel]="truckSearch()" (ngModelChange)="setTruckSearch($event)" placeholder="truck label" />
+          @if (truckSearch()) {
+            <button mat-icon-button matSuffix aria-label="Clear" (click)="setTruckSearch('')"><mat-icon>close</mat-icon></button>
+          } @else {
+            <mat-icon matSuffix>search</mat-icon>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" subscriptSizing="dynamic">
+          <mat-label>Date</mat-label>
+          <input matInput [matDatepicker]="histDp" [ngModel]="dateSearch()" (ngModelChange)="setDateSearch($event)" />
+          @if (dateSearch()) {
+            <button mat-icon-button matSuffix aria-label="Clear" (click)="setDateSearch(null)"><mat-icon>close</mat-icon></button>
+          }
+          <mat-datepicker-toggle matSuffix [for]="histDp"></mat-datepicker-toggle>
+          <mat-datepicker #histDp></mat-datepicker>
+        </mat-form-field>
+      </div>
+
+      <table mat-table [dataSource]="history()">
+        <ng-container matColumnDef="srNo">
+          <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+          <td mat-cell *matCellDef="let row; let i = index">{{ historyPager.pageIndex() * historyPager.pageSize() + i + 1 }}</td>
+        </ng-container>
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef>Date</th>
           <td mat-cell *matCellDef="let d">{{ d.dispatchDate | date:'medium' }}</td>
@@ -92,7 +138,13 @@
         <tr mat-header-row *matHeaderRowDef="historyColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: historyColumns"></tr>
       </table>
-      @if (!history().length) { <div class="empty">No dispatches recorded yet.</div> }
+      @if (!history().length) {
+        @if (truckSearch() || dateSearch()) {
+          <div class="empty">No dispatches match the selected filters.</div>
+        } @else {
+          <div class="empty">No dispatches recorded yet.</div>
+        }
+      }
       <mat-paginator [length]="historyPager.total()" [pageSize]="historyPager.pageSize()" [pageIndex]="historyPager.pageIndex()"
         [pageSizeOptions]="pageSizeOptions" (page)="historyPager.onPage($event)" showFirstLastButtons />
     </mat-card-content>

@@ -28,8 +28,8 @@ export class Dashboard implements OnInit {
 
   ngOnInit() {
     forkJoin({
-      items: this.api.getItems(),
-      customers: this.api.getCustomers(),
+      items: this.api.getAllItems(),
+      customers: this.api.getAllCustomers(),
       orders: this.api.getOrders()
     }).subscribe(r => {
       this.items.set(r.items);

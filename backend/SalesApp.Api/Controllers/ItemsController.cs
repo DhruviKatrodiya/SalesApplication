@@ -17,21 +17,47 @@ public class ItemsController : ControllerBase
 
     private static ItemDto Map(Item i) => new(
         i.Id, i.SubCategoryId, i.SubCategory!.Name, i.SubCategory.Category!.Name,
-        i.Name, i.Sku, i.Unit, i.StockQuantity, i.UnitPrice);
+        i.Name, i.Sku, i.Unit, i.StockQuantity, i.DispatchStock, i.UnitPrice);
 
     private IQueryable<Item> WithIncludes() =>
         _db.Items.Include(i => i.SubCategory).ThenInclude(s => s!.Category);
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ItemDto>>> GetAll(
-        [FromQuery] int? subCategoryId, [FromQuery] bool lowStock = false, [FromQuery] int threshold = 10)
+    public async Task<ActionResult<PagedResult<ItemDto>>> GetAll(
+        [FromQuery] int? subCategoryId, [FromQuery] bool lowStock = false, [FromQuery] int threshold = 10,
+        [FromQuery] string? category = null, [FromQuery] string? item = null, [FromQuery] string? sku = null,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         var query = WithIncludes();
         if (subCategoryId is not null) query = query.Where(i => i.SubCategoryId == subCategoryId);
         if (lowStock) query = query.Where(i => i.StockQuantity <= threshold);
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var term = category.Trim();
+            query = query.Where(i => i.SubCategory!.Category!.Name.Contains(term) || i.SubCategory.Name.Contains(term));
+        }
+        if (!string.IsNullOrWhiteSpace(item))
+        {
+            var term = item.Trim();
+            query = query.Where(i => i.Name.Contains(term));
+        }
+        if (!string.IsNullOrWhiteSpace(sku))
+        {
+            var term = sku.Trim();
+            query = query.Where(i => i.Sku != null && i.Sku.Contains(term));
+        }
 
-        var list = await query.OrderBy(i => i.Name).ToListAsync();
-        return Ok(list.Select(Map));
+        var ordered = query.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id);
+        var total = await ordered.CountAsync();
+        var pageItems = await ordered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return Ok(new PagedResult<ItemDto>(pageItems.Select(Map).ToList(), total, page, pageSize));
     }
 
     [HttpGet("{id:int}")]

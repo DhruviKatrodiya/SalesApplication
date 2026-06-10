@@ -10,18 +10,18 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import {
-  Order, Customer, Item, OrderStatus, PaymentStatus, ReceivedStatus,
-  OrderStatusLabels, PaymentStatusLabels, ReceivedStatusLabels
+  Order, Customer, Item, OrderStatus, PaymentStatus,
+  OrderStatusLabels, PaymentStatusLabels
 } from '../../core/models';
 import { OrderDialog } from './order-dialog';
 import { PaymentDialog } from './payment-dialog';
+import { OrderItemsDialog } from './order-items-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
@@ -29,7 +29,7 @@ import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
   selector: 'app-orders',
   imports: [
     FormsModule, DatePipe, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, MatMenuModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
     MatTooltipModule, MatPaginatorModule
   ],
   templateUrl: './orders.html',
@@ -43,7 +43,6 @@ export class Orders implements OnInit {
   orders = signal<Order[]>([]);
   customers = signal<Customer[]>([]);
   items = signal<Item[]>([]);
-  expandedId = signal<number | null>(null);
 
   // ---- Filters ----
   customerFilter = signal<string>('');
@@ -69,14 +68,12 @@ export class Orders implements OnInit {
     !!this.customerFilter() || !!this.orderDateFilter() ||
     this.deliveryStatusFilter() != null || this.paidStatusFilter() != null);
 
-  columns = ['expand', 'orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'actions'];
+  columns = ['orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'actions'];
 
   orderStatusLabel = OrderStatusLabels;
   paymentStatusLabel = PaymentStatusLabels;
-  receivedStatusLabel = ReceivedStatusLabels;
   statusOptions = Object.entries(OrderStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
   paymentOptions = Object.entries(PaymentStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
-  receivedOptions = Object.entries(ReceivedStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createPager(() => this.filtered());
@@ -96,18 +93,14 @@ export class Orders implements OnInit {
 
   ngOnInit() {
     forkJoin({
-      customers: this.api.getCustomers(),
-      items: this.api.getItems()
+      customers: this.api.getAllCustomers(),
+      items: this.api.getAllItems()
     }).subscribe(r => { this.customers.set(r.customers); this.items.set(r.items); });
     this.load();
   }
 
   load() {
     this.api.getOrders().subscribe(list => this.orders.set(list));
-  }
-
-  toggle(o: Order) {
-    this.expandedId.set(this.expandedId() === o.id ? null : o.id);
   }
 
   create() {
@@ -120,7 +113,10 @@ export class Orders implements OnInit {
       data: { customers: this.customers(), items: this.items(), order: null }
     })
       .afterClosed().subscribe(res => {
-        if (res) this.api.createOrder(res).subscribe(() => { this.snack.open('Order created', 'Close', { duration: 2000 }); this.load(); });
+        if (res) this.api.createOrder(res).subscribe({
+          next: () => { this.snack.open('Order created', 'Close', { duration: 2000 }); this.load(); },
+          error: (e) => this.snack.open(e?.error?.message ?? 'Could not create order.', 'Close', { duration: 4000 })
+        });
       });
   }
 
@@ -130,9 +126,15 @@ export class Orders implements OnInit {
       data: { customers: this.customers(), items: this.items(), order: o }
     })
       .afterClosed().subscribe(res => {
-        if (res) this.api.updateOrder(o.id, res).subscribe(() => { this.snack.open('Order updated', 'Close', { duration: 2000 }); this.load(); });
+        if (res) this.api.updateOrder(o.id, res).subscribe({
+          next: () => { this.snack.open('Order updated', 'Close', { duration: 2000 }); this.load(); },
+          error: (e) => this.snack.open(e?.error?.message ?? 'Could not update order.', 'Close', { duration: 4000 })
+        });
       });
   }
+
+  /** An order is locked (no further editing) once it is Completed. */
+  isLocked(o: Order): boolean { return o.status === OrderStatus.Completed; }
 
   changeStatus(o: Order, status: OrderStatus) {
     this.api.updateOrderStatus(o.id, status).subscribe(updated => {
@@ -141,11 +143,9 @@ export class Orders implements OnInit {
     });
   }
 
-  changeReceived(o: Order, orderItemId: number, status: ReceivedStatus) {
-    this.api.updateReceivedStatus(o.id, orderItemId, status).subscribe(updated => {
-      this.snack.open('Item status updated', 'Close', { duration: 1500 });
-      this.replace(updated);
-    });
+  viewItems(o: Order) {
+    this.dialog.open(OrderItemsDialog, { data: o, width: '760px', maxWidth: '95vw' })
+      .afterClosed().subscribe(changed => { if (changed) this.load(); });
   }
 
   managePayments(o: Order) {

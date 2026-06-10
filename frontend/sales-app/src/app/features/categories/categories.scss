@@ -10,7 +10,10 @@ mat-card-header {
   display: flex;
   align-items: center;
   padding-top: 12px;
+  padding-bottom: 16px;   // breathing room between the Add button and the table
 }
+.search-field { width: 100%; margin-bottom: 20px; }
 .clickable { cursor: pointer; }
+.action-stack { display: inline-flex; flex-direction: row; flex-wrap: nowrap; align-items: center; }
 tr.selected { background: var(--mat-sys-secondary-container); }
 .muted { color: var(--mat-sys-on-surface-variant); font-weight: 400; font-size: 0.9em; }

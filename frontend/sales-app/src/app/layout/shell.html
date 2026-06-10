@@ -17,10 +17,11 @@
 </mat-toolbar>
 
 <mat-sidenav-container class="container">
-  <mat-sidenav [opened]="opened()" mode="side" class="sidenav">
+  <mat-sidenav [opened]="opened()" (openedChange)="opened.set($event)"
+               [mode]="isMobile() ? 'over' : 'side'" class="sidenav">
     <mat-nav-list>
       @for (item of nav; track item.path) {
-        <a mat-list-item [routerLink]="item.path" routerLinkActive="active">
+        <a mat-list-item [routerLink]="item.path" routerLinkActive="active" (click)="onNavClick()">
           <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
           <span matListItemTitle>{{ item.label }}</span>
         </a>
@@ -32,3 +33,18 @@
     <router-outlet />
   </mat-sidenav-content>
 </mat-sidenav-container>
+
+@if (isMobile()) {
+  <nav class="bottom-nav">
+    @for (item of bottomNav; track item.path) {
+      <a class="bn-item" [routerLink]="item.path" routerLinkActive="active" (click)="onNavClick()">
+        <mat-icon>{{ item.icon }}</mat-icon>
+        <span class="bn-label">{{ item.label }}</span>
+      </a>
+    }
+    <button type="button" class="bn-item" (click)="toggle()">
+      <mat-icon>menu</mat-icon>
+      <span class="bn-label">More</span>
+    </button>
+  </nav>
+}

@@ -106,9 +106,37 @@ namespace SalesApp.Api.Migrations
                     b.Property<string>("Phone")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("RouteId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("RouteId");
+
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("SalesApp.Api.Models.DeliveryRoute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Routes");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.Dispatch", b =>
@@ -132,6 +160,38 @@ namespace SalesApp.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Dispatches");
+                });
+
+            modelBuilder.Entity("SalesApp.Api.Models.DispatchDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TruckLabel")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("DispatchDrafts");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.DispatchItem", b =>
@@ -170,6 +230,9 @@ namespace SalesApp.Api.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("DispatchStock")
+                        .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -235,6 +298,9 @@ namespace SalesApp.Api.Migrations
                     b.Property<decimal>("RemainingAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -381,6 +447,16 @@ namespace SalesApp.Api.Migrations
                     b.ToTable("SubCategories");
                 });
 
+            modelBuilder.Entity("SalesApp.Api.Models.Customer", b =>
+                {
+                    b.HasOne("SalesApp.Api.Models.DeliveryRoute", "Route")
+                        .WithMany("Customers")
+                        .HasForeignKey("RouteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Route");
+                });
+
             modelBuilder.Entity("SalesApp.Api.Models.DispatchItem", b =>
                 {
                     b.HasOne("SalesApp.Api.Models.Dispatch", "Dispatch")
@@ -471,6 +547,11 @@ namespace SalesApp.Api.Migrations
             modelBuilder.Entity("SalesApp.Api.Models.Customer", b =>
                 {
                     b.Navigation("Orders");
+                });
+
+            modelBuilder.Entity("SalesApp.Api.Models.DeliveryRoute", b =>
+                {
+                    b.Navigation("Customers");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.Dispatch", b =>

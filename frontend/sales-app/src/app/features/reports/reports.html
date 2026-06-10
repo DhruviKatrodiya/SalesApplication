@@ -45,6 +45,10 @@
       <mat-card-header><mat-card-title>Breakdown by Month</mat-card-title></mat-card-header>
       <mat-card-content>
         <table mat-table [dataSource]="rowsPager.paged()">
+          <ng-container matColumnDef="srNo">
+            <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+            <td mat-cell *matCellDef="let row; let i = index">{{ rowsPager.pageIndex() * rowsPager.pageSize() + i + 1 }}</td>
+          </ng-container>
           <ng-container matColumnDef="label"><th mat-header-cell *matHeaderCellDef>Month</th><td mat-cell *matCellDef="let r">{{ r.label }}</td></ng-container>
           <ng-container matColumnDef="orders"><th mat-header-cell *matHeaderCellDef>Orders</th><td mat-cell *matCellDef="let r">{{ r.orderCount }}</td></ng-container>
           <ng-container matColumnDef="total"><th mat-header-cell *matHeaderCellDef>Total</th><td mat-cell *matCellDef="let r">{{ r.totalAmount | currency:'INR' }}</td></ng-container>
@@ -64,6 +68,10 @@
     <mat-card-header><mat-card-title>Per-Customer Summary (Pending vs Delivered)</mat-card-title></mat-card-header>
     <mat-card-content>
       <table mat-table [dataSource]="custPager.paged()">
+        <ng-container matColumnDef="srNo">
+          <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+          <td mat-cell *matCellDef="let row; let i = index">{{ custPager.pageIndex() * custPager.pageSize() + i + 1 }}</td>
+        </ng-container>
         <ng-container matColumnDef="customer"><th mat-header-cell *matHeaderCellDef>Customer</th><td mat-cell *matCellDef="let r">{{ r.customerName }}</td></ng-container>
         <ng-container matColumnDef="orders"><th mat-header-cell *matHeaderCellDef>Orders</th><td mat-cell *matCellDef="let r">{{ r.totalOrders }}</td></ng-container>
         <ng-container matColumnDef="pending"><th mat-header-cell *matHeaderCellDef>Pending</th><td mat-cell *matCellDef="let r"><span class="chip chip-remaining">{{ r.pendingOrders }}</span></td></ng-container>

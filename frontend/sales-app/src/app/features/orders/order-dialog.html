@@ -1,6 +1,12 @@
 <h2 mat-dialog-title>{{ isEdit ? 'Edit Order' : 'New Order' }}</h2>
 <mat-dialog-content>
   <div class="dialog-form">
+    <mat-radio-group class="source-group" [ngModel]="source()" (ngModelChange)="source.set($event)" aria-label="Stock handling">
+      <span class="source-label">Stock from:</span>
+      <mat-radio-button [value]="OrderSource.Inventory">Inventory</mat-radio-button>
+      <mat-radio-button [value]="OrderSource.Dispatch">Dispatch (Truck)</mat-radio-button>
+    </mat-radio-group>
+
     <div class="row">
       <mat-form-field appearance="fill" style="flex:1; min-width:240px">
         <mat-label>Customer</mat-label>
@@ -15,14 +21,34 @@
         <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
         <mat-datepicker #picker></mat-datepicker>
       </mat-form-field>
+      @if (isEdit) {
+        <mat-form-field appearance="fill">
+          <mat-label>Delivery Status</mat-label>
+          <mat-select [ngModel]="status()" (ngModelChange)="status.set($event)">
+            @for (s of statusOptions; track s.value) { <mat-option [value]="s.value">{{ s.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      }
     </div>
 
     <div class="row">
       <mat-form-field appearance="fill" style="flex:1; min-width:220px">
         <mat-label>Add Item</mat-label>
-        <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)">
-          @for (i of data.items; track i.id) {
+        <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)"
+                    (opened)="onItemSelectOpened()" (closed)="itemSearch.set('')">
+          <div class="select-search">
+            <mat-icon class="select-search-icon">search</mat-icon>
+            <input #itemSearchInput type="text" class="select-search-input" placeholder="Search item…"
+                   [value]="itemSearch()"
+                   (input)="itemSearch.set($any($event.target).value)"
+                   (keydown)="$event.stopPropagation()"
+                   (click)="$event.stopPropagation()" />
+          </div>
+          @for (i of filteredItems(); track i.id) {
             <mat-option [value]="i.id">{{ i.name }} ({{ i.unitPrice | currency:'INR' }})</mat-option>
+          }
+          @if (!filteredItems().length) {
+            <div class="select-empty">No items found</div>
           }
         </mat-select>
       </mat-form-field>
@@ -34,6 +60,10 @@
     </div>
 
     <table mat-table [dataSource]="lines()" class="full">
+      <ng-container matColumnDef="srNo">
+        <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+        <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+      </ng-container>
       <ng-container matColumnDef="item">
         <th mat-header-cell *matHeaderCellDef>Item</th>
         <td mat-cell *matCellDef="let l">{{ l.itemName }}</td>

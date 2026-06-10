@@ -13,6 +13,7 @@ public class Order
 
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
+    public OrderSource Source { get; set; } = OrderSource.Inventory;
 
     public decimal TotalAmount { get; set; }
     public decimal PaidAmount { get; set; }

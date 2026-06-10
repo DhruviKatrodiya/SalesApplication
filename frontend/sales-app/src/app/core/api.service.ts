@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   Category, SubCategory, Item, Customer, CustomerSearchResult,
   Order, OrderStatus, Payment, Dispatch, ReceivedStatus,
-  ReportSummary, CustomerReportRow, User
+  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -27,44 +28,105 @@ export class ApiService {
   }
 
   // ---- Categories ----
-  getCategories() { return this.http.get<Category[]>(`${this.base}/categories`); }
+  getCategories(opts?: { search?: string; page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Category>>(`${this.base}/categories`, { params: p });
+  }
+  /** Full list (e.g. to populate a dropdown), independent of table paging. */
+  getAllCategories(search?: string) {
+    return this.getCategories({ search, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
+  }
   createCategory(b: { name: string; description?: string }) { return this.http.post<Category>(`${this.base}/categories`, b); }
   updateCategory(id: number, b: { name: string; description?: string }) { return this.http.put<Category>(`${this.base}/categories/${id}`, b); }
   deleteCategory(id: number) { return this.http.delete(`${this.base}/categories/${id}`); }
 
   // ---- SubCategories ----
-  getSubCategories(categoryId?: number) {
+  getSubCategories(opts?: { categoryId?: number; search?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
-    if (categoryId) p = p.set('categoryId', categoryId);
-    return this.http.get<SubCategory[]>(`${this.base}/subcategories`, { params: p });
+    if (opts?.categoryId) p = p.set('categoryId', opts.categoryId);
+    if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<SubCategory>>(`${this.base}/subcategories`, { params: p });
+  }
+  /** Full list (e.g. to populate the item dialog's sub-category dropdown). */
+  getAllSubCategories(categoryId?: number) {
+    return this.getSubCategories({ categoryId, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
   }
   createSubCategory(b: { categoryId: number; name: string; description?: string }) { return this.http.post<SubCategory>(`${this.base}/subcategories`, b); }
   updateSubCategory(id: number, b: { categoryId: number; name: string; description?: string }) { return this.http.put<SubCategory>(`${this.base}/subcategories/${id}`, b); }
   deleteSubCategory(id: number) { return this.http.delete(`${this.base}/subcategories/${id}`); }
 
   // ---- Items / Inventory ----
-  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number }) {
+  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.subCategoryId) p = p.set('subCategoryId', opts.subCategoryId);
     if (opts?.lowStock) p = p.set('lowStock', true);
     if (opts?.threshold != null) p = p.set('threshold', opts.threshold);
-    return this.http.get<Item[]>(`${this.base}/items`, { params: p });
+    if (opts?.category) p = p.set('category', opts.category);
+    if (opts?.item) p = p.set('item', opts.item);
+    if (opts?.sku) p = p.set('sku', opts.sku);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Item>>(`${this.base}/items`, { params: p });
+  }
+  /** Full item list (e.g. dashboard, order/dispatch dropdowns), independent of table paging. */
+  getAllItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string }) {
+    return this.getItems({ ...opts, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
   }
   createItem(b: any) { return this.http.post<Item>(`${this.base}/items`, b); }
   updateItem(id: number, b: any) { return this.http.put<Item>(`${this.base}/items/${id}`, b); }
   deleteItem(id: number) { return this.http.delete(`${this.base}/items/${id}`); }
 
   // ---- Dispatch ----
-  getDispatches() { return this.http.get<Dispatch[]>(`${this.base}/dispatch`); }
+  getDispatches(opts?: { truck?: string; date?: string; page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.truck) p = p.set('truck', opts.truck);
+    if (opts?.date) p = p.set('date', opts.date);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Dispatch>>(`${this.base}/dispatch`, { params: p });
+  }
   createDispatch(b: { truckLabel?: string; notes?: string; items: { itemId: number; quantity: number }[] }) {
     return this.http.post<Dispatch>(`${this.base}/dispatch`, b);
   }
+  // Unsaved dispatch cart, persisted per user (each line carries its truck)
+  getDispatchDraft() { return this.http.get<DispatchDraft>(`${this.base}/dispatch/draft`); }
+  saveDispatchDraft(b: DispatchDraft) { return this.http.put<DispatchDraft>(`${this.base}/dispatch/draft`, b); }
+  clearDispatchDraft() { return this.http.delete(`${this.base}/dispatch/draft`); }
+
+  // ---- Routes ----
+  getRoutes(opts?: { search?: string; page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Route>>(`${this.base}/routes`, { params: p });
+  }
+  /** Full route list (e.g. the customer dialog dropdown), independent of table paging. */
+  getAllRoutes(search?: string) {
+    return this.getRoutes({ search, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
+  }
+  createRoute(b: { name: string; description?: string }) { return this.http.post<Route>(`${this.base}/routes`, b); }
+  updateRoute(id: number, b: { name: string; description?: string }) { return this.http.put<Route>(`${this.base}/routes/${id}`, b); }
+  deleteRoute(id: number) { return this.http.delete(`${this.base}/routes/${id}`); }
 
   // ---- Customers ----
-  getCustomers(query?: string) {
+  getCustomers(opts?: { name?: string; phone?: string; routeId?: number; page?: number; pageSize?: number }) {
     let p = new HttpParams();
-    if (query) p = p.set('query', query);
-    return this.http.get<Customer[]>(`${this.base}/customers`, { params: p });
+    if (opts?.name) p = p.set('name', opts.name);
+    if (opts?.phone) p = p.set('phone', opts.phone);
+    if (opts?.routeId) p = p.set('routeId', opts.routeId);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Customer>>(`${this.base}/customers`, { params: p });
+  }
+  /** Full customer list (e.g. order dialog dropdown, dashboard), independent of table paging. */
+  getAllCustomers(opts?: { name?: string; phone?: string; routeId?: number }) {
+    return this.getCustomers({ ...opts, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
   }
   getCustomerDetails(id: number) { return this.http.get<CustomerSearchResult>(`${this.base}/customers/${id}/details`); }
   searchCustomers(query: string) {

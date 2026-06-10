@@ -3,14 +3,14 @@ using SalesApp.Api.Models;
 namespace SalesApp.Api.DTOs;
 
 // Customers
-public record CustomerRequest(string Name, string? Phone, string? Email, string? Address);
-public record CustomerDto(int Id, string Name, string? Phone, string? Email, string? Address, DateTime CreatedAt);
+public record CustomerRequest(string Name, string? Phone, string? Email, string? Address, int? RouteId);
+public record CustomerDto(int Id, string Name, string? Phone, string? Email, string? Address, int? RouteId, string? RouteName, DateTime CreatedAt);
 
 // Orders
 public record OrderItemRequest(int ItemId, int Quantity, decimal? UnitPrice);
 public record OrderRequest(
     int CustomerId, DateTime? OrderDate, DateTime? DeliveryDate, string? Notes,
-    List<OrderItemRequest> Items);
+    List<OrderItemRequest> Items, OrderStatus? Status = null, OrderSource? Source = null);
 
 public record OrderItemDto(
     int Id, int ItemId, string ItemName, int Quantity, decimal UnitPrice, decimal LineTotal,
@@ -19,7 +19,7 @@ public record OrderItemDto(
 public record OrderDto(
     int Id, string OrderNumber, int CustomerId, string CustomerName,
     DateTime OrderDate, DateTime? DeliveryDate,
-    OrderStatus Status, PaymentStatus PaymentStatus,
+    OrderStatus Status, PaymentStatus PaymentStatus, OrderSource Source,
     decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount,
     string? Notes, List<OrderItemDto> Items);
 

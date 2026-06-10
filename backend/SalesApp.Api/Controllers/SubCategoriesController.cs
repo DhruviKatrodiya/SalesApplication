@@ -16,17 +16,31 @@ public class SubCategoriesController : ControllerBase
     public SubCategoriesController(AppDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<SubCategoryDto>>> GetAll([FromQuery] int? categoryId)
+    public async Task<ActionResult<PagedResult<SubCategoryDto>>> GetAll(
+        [FromQuery] int? categoryId, [FromQuery] string? search,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         var query = _db.SubCategories.Include(s => s.Category).AsQueryable();
         if (categoryId is not null) query = query.Where(s => s.CategoryId == categoryId);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(s => s.Name.Contains(term));
+        }
 
-        var list = await query
-            .OrderBy(s => s.Name)
+        var total = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(s => new SubCategoryDto(
                 s.Id, s.CategoryId, s.Category!.Name, s.Name, s.Description, s.Items.Count))
             .ToListAsync();
-        return Ok(list);
+
+        return Ok(new PagedResult<SubCategoryDto>(items, total, page, pageSize));
     }
 
     [HttpGet("{id:int}")]

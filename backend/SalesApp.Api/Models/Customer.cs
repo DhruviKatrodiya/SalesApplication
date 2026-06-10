@@ -9,5 +9,8 @@ public class Customer
     public string? Address { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public int? RouteId { get; set; }
+    public DeliveryRoute? Route { get; set; }
+
     public ICollection<Order> Orders { get; set; } = new List<Order>();
 }
