@@ -21,8 +21,9 @@
 
         <mat-form-field appearance="fill" class="full">
           <mat-label>Phone</mat-label>
-          <input matInput formControlName="phone" />
+          <input matInput formControlName="phone" appDigitsOnly inputmode="numeric" maxlength="15" />
           <mat-icon matSuffix>phone</mat-icon>
+          @if (form.controls.phone.hasError('pattern')) { <mat-error>Enter a valid phone number (7–15 digits)</mat-error> }
         </mat-form-field>
 
         <label class="mat-mdc-form-field-label" style="display:block; color: var(--mat-sys-on-surface-variant); margin: 4px 0;">Profile Image</label>

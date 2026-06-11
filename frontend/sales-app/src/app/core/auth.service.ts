@@ -22,12 +22,19 @@ export class AuthService {
 
   login(email: string, password: string): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.base}/login`, { email, password }).pipe(
-      tap(res => {
-        localStorage.setItem(TOKEN_KEY, res.token);
-        localStorage.setItem(USER_KEY, JSON.stringify(res.user));
-        this.currentUser.set(res.user);
-      })
+      tap(res => this.store(res))
     );
+  }
+
+  // Registers the account but does NOT sign the user in — they are sent to the login page.
+  register(body: { fullName: string; email: string; phone?: string; password: string }): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.base}/register`, body);
+  }
+
+  private store(res: LoginResponse) {
+    localStorage.setItem(TOKEN_KEY, res.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(res.user));
+    this.currentUser.set(res.user);
   }
 
   forgotPassword(email: string) {

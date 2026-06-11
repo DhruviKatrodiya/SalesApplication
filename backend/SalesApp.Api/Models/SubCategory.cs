@@ -3,6 +3,7 @@ namespace SalesApp.Api.Models;
 public class SubCategory
 {
     public int Id { get; set; }
+    public int UserId { get; set; }   // owning salesperson
     public int CategoryId { get; set; }
     public Category? Category { get; set; }
 

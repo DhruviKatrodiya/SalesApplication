@@ -10,7 +10,7 @@ namespace SalesApp.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class ReportsController : ControllerBase
+public class ReportsController : OwnedControllerBase
 {
     private readonly AppDbContext _db;
     public ReportsController(AppDbContext db) => _db = db;
@@ -24,7 +24,8 @@ public class ReportsController : ControllerBase
         [FromQuery] int year, [FromQuery] int? month,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        var query = _db.Orders.Where(o => o.OrderDate.Year == year);
+        var uid = CurrentUserId;
+        var query = _db.Orders.Where(o => o.SalesmanId == uid && o.OrderDate.Year == year);
         if (month is not null) query = query.Where(o => o.OrderDate.Month == month);
         var orders = await query.ToListAsync();
 
@@ -46,8 +47,9 @@ public class ReportsController : ControllerBase
         [FromQuery] int year, [FromQuery] int month,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        var uid = CurrentUserId;
         var orders = await _db.Orders
-            .Where(o => o.OrderDate.Year == year && o.OrderDate.Month == month)
+            .Where(o => o.SalesmanId == uid && o.OrderDate.Year == year && o.OrderDate.Month == month)
             .ToListAsync();
 
         var rows = orders
@@ -66,7 +68,8 @@ public class ReportsController : ControllerBase
     public async Task<ActionResult<ReportSummary>> Yearly(
         [FromQuery] int year, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        var orders = await _db.Orders.Where(o => o.OrderDate.Year == year).ToListAsync();
+        var uid = CurrentUserId;
+        var orders = await _db.Orders.Where(o => o.SalesmanId == uid && o.OrderDate.Year == year).ToListAsync();
         var rows = orders
             .GroupBy(o => o.OrderDate.Month)
             .OrderBy(g => g.Key)
@@ -85,8 +88,10 @@ public class ReportsController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
+        var uid = CurrentUserId;
         var grouped = _db.Orders
             .Include(o => o.Customer)
+            .Where(o => o.SalesmanId == uid)
             .GroupBy(o => new { o.CustomerId, o.Customer!.Name })
             .Select(g => new
             {

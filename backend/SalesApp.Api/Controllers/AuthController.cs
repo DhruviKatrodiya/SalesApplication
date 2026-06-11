@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SalesApp.Api.Data;
 using SalesApp.Api.DTOs;
+using SalesApp.Api.Models;
 using SalesApp.Api.Services;
 
 namespace SalesApp.Api.Controllers;
@@ -21,6 +22,33 @@ public class AuthController : ControllerBase
         _jwt = jwt;
         _otp = otp;
         _email = email;
+    }
+
+    [HttpPost("register")]
+    public async Task<ActionResult<LoginResponse>> Register(RegisterRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Email) || string.IsNullOrWhiteSpace(req.Password))
+            return BadRequest(new MessageResponse("Email and password are required."));
+        if (req.Password.Length < 6)
+            return BadRequest(new MessageResponse("Password must be at least 6 characters."));
+
+        var email = req.Email.Trim();
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return BadRequest(new MessageResponse("An account with this email already exists."));
+
+        var user = new AppUser
+        {
+            FullName = string.IsNullOrWhiteSpace(req.FullName) ? email : req.FullName.Trim(),
+            Email = email,
+            Phone = req.Phone,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password)
+        };
+        _db.Users.Add(user);
+        await _db.SaveChangesAsync();
+
+        var token = _jwt.CreateToken(user);
+        var dto = new UserDto(user.Id, user.FullName, user.Email, user.Phone, user.ProfileImagePath);
+        return Ok(new LoginResponse(token, dto));
     }
 
     [HttpPost("login")]

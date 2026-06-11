@@ -10,7 +10,7 @@ namespace SalesApp.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class SubCategoriesController : ControllerBase
+public class SubCategoriesController : OwnedControllerBase
 {
     private readonly AppDbContext _db;
     public SubCategoriesController(AppDbContext db) => _db = db;
@@ -23,7 +23,8 @@ public class SubCategoriesController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
-        var query = _db.SubCategories.Include(s => s.Category).AsQueryable();
+        var uid = CurrentUserId;
+        var query = _db.SubCategories.Include(s => s.Category).Where(s => s.UserId == uid);
         if (categoryId is not null) query = query.Where(s => s.CategoryId == categoryId);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -47,7 +48,7 @@ public class SubCategoriesController : ControllerBase
     public async Task<ActionResult<SubCategoryDto>> Get(int id)
     {
         var s = await _db.SubCategories.Include(x => x.Category).Include(x => x.Items)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (s is null) return NotFound();
         return Ok(new SubCategoryDto(s.Id, s.CategoryId, s.Category!.Name, s.Name, s.Description, s.Items.Count));
     }
@@ -55,10 +56,11 @@ public class SubCategoriesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<SubCategoryDto>> Create(SubCategoryRequest req)
     {
-        if (!await _db.Categories.AnyAsync(c => c.Id == req.CategoryId))
+        var uid = CurrentUserId;
+        if (!await _db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
             return BadRequest(new MessageResponse("Category not found."));
 
-        var s = new SubCategory { CategoryId = req.CategoryId, Name = req.Name, Description = req.Description };
+        var s = new SubCategory { UserId = uid, CategoryId = req.CategoryId, Name = req.Name, Description = req.Description };
         _db.SubCategories.Add(s);
         await _db.SaveChangesAsync();
         await _db.Entry(s).Reference(x => x.Category).LoadAsync();
@@ -69,8 +71,11 @@ public class SubCategoriesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<ActionResult<SubCategoryDto>> Update(int id, SubCategoryRequest req)
     {
-        var s = await _db.SubCategories.FindAsync(id);
+        var uid = CurrentUserId;
+        var s = await _db.SubCategories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
         if (s is null) return NotFound();
+        if (!await _db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
+            return BadRequest(new MessageResponse("Category not found."));
         s.CategoryId = req.CategoryId;
         s.Name = req.Name;
         s.Description = req.Description;
@@ -82,7 +87,7 @@ public class SubCategoriesController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var s = await _db.SubCategories.FindAsync(id);
+        var s = await _db.SubCategories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (s is null) return NotFound();
         _db.SubCategories.Remove(s);
         await _db.SaveChangesAsync();

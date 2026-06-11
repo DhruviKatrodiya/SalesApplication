@@ -10,7 +10,7 @@ namespace SalesApp.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class RoutesController : ControllerBase
+public class RoutesController : OwnedControllerBase
 {
     private readonly AppDbContext _db;
     public RoutesController(AppDbContext db) => _db = db;
@@ -22,7 +22,8 @@ public class RoutesController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
-        var query = _db.Routes.AsQueryable();
+        var uid = CurrentUserId;
+        var query = _db.Routes.Where(r => r.UserId == uid);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -43,7 +44,8 @@ public class RoutesController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<RouteDto>> Get(int id)
     {
-        var r = await _db.Routes.Include(x => x.Customers).FirstOrDefaultAsync(x => x.Id == id);
+        var r = await _db.Routes.Include(x => x.Customers)
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (r is null) return NotFound();
         return Ok(new RouteDto(r.Id, r.Name, r.Description, r.Customers.Count));
     }
@@ -51,7 +53,7 @@ public class RoutesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<RouteDto>> Create(RouteRequest req)
     {
-        var r = new DeliveryRoute { Name = req.Name, Description = req.Description };
+        var r = new DeliveryRoute { UserId = CurrentUserId, Name = req.Name, Description = req.Description };
         _db.Routes.Add(r);
         await _db.SaveChangesAsync();
         return CreatedAtAction(nameof(Get), new { id = r.Id }, new RouteDto(r.Id, r.Name, r.Description, 0));
@@ -60,7 +62,7 @@ public class RoutesController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<ActionResult<RouteDto>> Update(int id, RouteRequest req)
     {
-        var r = await _db.Routes.FindAsync(id);
+        var r = await _db.Routes.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (r is null) return NotFound();
         r.Name = req.Name;
         r.Description = req.Description;
@@ -71,7 +73,7 @@ public class RoutesController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var r = await _db.Routes.FindAsync(id);
+        var r = await _db.Routes.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (r is null) return NotFound();
         _db.Routes.Remove(r);   // customers on this route are unassigned (RouteId -> null)
         await _db.SaveChangesAsync();

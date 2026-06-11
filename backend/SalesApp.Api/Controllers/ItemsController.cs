@@ -10,7 +10,7 @@ namespace SalesApp.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/[controller]")]
-public class ItemsController : ControllerBase
+public class ItemsController : OwnedControllerBase
 {
     private readonly AppDbContext _db;
     public ItemsController(AppDbContext db) => _db = db;
@@ -20,7 +20,8 @@ public class ItemsController : ControllerBase
         i.Name, i.Sku, i.Unit, i.StockQuantity, i.DispatchStock, i.UnitPrice);
 
     private IQueryable<Item> WithIncludes() =>
-        _db.Items.Include(i => i.SubCategory).ThenInclude(s => s!.Category);
+        _db.Items.Include(i => i.SubCategory).ThenInclude(s => s!.Category)
+            .Where(i => i.UserId == CurrentUserId);
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<ItemDto>>> GetAll(
@@ -71,11 +72,13 @@ public class ItemsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ItemDto>> Create(ItemRequest req)
     {
-        if (!await _db.SubCategories.AnyAsync(s => s.Id == req.SubCategoryId))
+        var uid = CurrentUserId;
+        if (!await _db.SubCategories.AnyAsync(s => s.Id == req.SubCategoryId && s.UserId == uid))
             return BadRequest(new MessageResponse("SubCategory not found."));
 
         var i = new Item
         {
+            UserId = uid,
             SubCategoryId = req.SubCategoryId,
             Name = req.Name,
             Sku = req.Sku,
@@ -92,8 +95,11 @@ public class ItemsController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<ActionResult<ItemDto>> Update(int id, ItemRequest req)
     {
-        var i = await _db.Items.FindAsync(id);
+        var uid = CurrentUserId;
+        var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
         if (i is null) return NotFound();
+        if (!await _db.SubCategories.AnyAsync(s => s.Id == req.SubCategoryId && s.UserId == uid))
+            return BadRequest(new MessageResponse("SubCategory not found."));
         i.SubCategoryId = req.SubCategoryId;
         i.Name = req.Name;
         i.Sku = req.Sku;
@@ -108,7 +114,7 @@ public class ItemsController : ControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var i = await _db.Items.FindAsync(id);
+        var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (i is null) return NotFound();
         _db.Items.Remove(i);
         await _db.SaveChangesAsync();

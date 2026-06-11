@@ -8,10 +8,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
+import { DigitsOnlyDirective } from '../../shared/digits-only.directive';
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule],
+  imports: [ReactiveFormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, DigitsOnlyDirective],
   templateUrl: './profile.html',
   styles: `
     .avatar-row { display:flex; align-items:center; gap:20px; margin: 4px 0 20px; flex-wrap:wrap; }
@@ -39,7 +40,7 @@ export class Profile implements OnInit {
   form = this.fb.nonNullable.group({
     fullName: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
-    phone: [''],
+    phone: ['', Validators.pattern(/^\d{7,15}$/)],
     profileImagePath: ['']
   });
 

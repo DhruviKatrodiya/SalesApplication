@@ -40,7 +40,8 @@ public class StockRequestsController : ControllerBase
     private async Task BuildLinesAsync(StockRequest request, List<StockRequestItemRequest> lines)
     {
         var ids = lines.Select(l => l.ItemId).ToList();
-        var items = await _db.Items.Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var uid = CurrentUserId;
+        var items = await _db.Items.Where(i => ids.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
         request.Items.Clear();
         foreach (var line in lines)
         {

@@ -1,6 +1,7 @@
 namespace SalesApp.Api.DTOs;
 
 public record LoginRequest(string Email, string Password);
+public record RegisterRequest(string FullName, string Email, string? Phone, string Password);
 public record LoginResponse(string Token, UserDto User);
 
 public record UserDto(int Id, string FullName, string Email, string? Phone, string? ProfileImagePath);

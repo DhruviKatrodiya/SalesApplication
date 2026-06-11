@@ -7,12 +7,13 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { Customer, Route } from '../../core/models';
+import { DigitsOnlyDirective } from '../../shared/digits-only.directive';
 
 interface DialogData { customer: Customer | null; routes: Route[]; }
 
 @Component({
   selector: 'app-customer-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule],
+  imports: [ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, DigitsOnlyDirective],
   template: `
     <h2 mat-dialog-title>{{ data.customer ? 'Edit' : 'Add' }} Customer</h2>
     <mat-dialog-content>
@@ -24,8 +25,9 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Phone</mat-label>
-          <input matInput formControlName="phone" required />
+          <input matInput formControlName="phone" appDigitsOnly inputmode="numeric" maxlength="15" required />
           @if (form.controls.phone.hasError('required')) { <mat-error>Phone is required</mat-error> }
+          @if (form.controls.phone.hasError('pattern')) { <mat-error>Enter a valid phone number (7–15 digits)</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Email</mat-label>
@@ -111,7 +113,7 @@ export class CustomerDialog {
 
   form = this.fb.nonNullable.group({
     name: [this.data.customer?.name ?? '', Validators.required],
-    phone: [this.data.customer?.phone ?? '', Validators.required],
+    phone: [this.data.customer?.phone ?? '', [Validators.required, Validators.pattern(/^\d{7,15}$/)]],
     email: [this.data.customer?.email ?? ''],
     routeId: [this.data.customer?.routeId ?? null as number | null],
     address: [this.data.customer?.address ?? '']

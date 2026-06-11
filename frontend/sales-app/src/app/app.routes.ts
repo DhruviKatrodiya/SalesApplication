@@ -4,6 +4,7 @@ import { Shell } from './layout/shell';
 
 export const routes: Routes = [
   { path: 'login', loadComponent: () => import('./features/auth/login').then(m => m.Login) },
+  { path: 'register', loadComponent: () => import('./features/auth/register').then(m => m.Register) },
   { path: 'forgot-password', loadComponent: () => import('./features/auth/forgot-password').then(m => m.ForgotPassword) },
   { path: 'reset-password', loadComponent: () => import('./features/auth/reset-password').then(m => m.ResetPassword) },
 

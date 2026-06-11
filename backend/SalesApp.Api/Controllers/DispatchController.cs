@@ -32,9 +32,10 @@ public class DispatchController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
+        var uid = CurrentUserId;
         var query = _db.Dispatches
             .Include(d => d.Items).ThenInclude(i => i.Item)
-            .AsQueryable();
+            .Where(d => d.UserId == uid);
 
         if (!string.IsNullOrWhiteSpace(truck))
         {
@@ -62,7 +63,7 @@ public class DispatchController : ControllerBase
     public async Task<ActionResult<DispatchDto>> Get(int id)
     {
         var d = await _db.Dispatches.Include(x => x.Items).ThenInclude(i => i.Item)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (d is null) return NotFound();
         return Ok(Map(d));
     }
@@ -77,8 +78,9 @@ public class DispatchController : ControllerBase
         if (req.Items is null || req.Items.Count == 0)
             return BadRequest(new MessageResponse("At least one item is required."));
 
+        var uid = CurrentUserId;
         var itemIds = req.Items.Select(i => i.ItemId).ToList();
-        var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var items = await _db.Items.Where(i => itemIds.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
 
         // Validate existence and stock availability
         foreach (var line in req.Items)
@@ -100,11 +102,11 @@ public class DispatchController : ControllerBase
         // so a truck has a single consolidated entry per day (same items sum their quantities).
         var dispatch = await _db.Dispatches
             .Include(d => d.Items)
-            .FirstOrDefaultAsync(d => d.TruckLabel == truck && d.DispatchDate >= dayStart && d.DispatchDate < dayEnd);
+            .FirstOrDefaultAsync(d => d.UserId == uid && d.TruckLabel == truck && d.DispatchDate >= dayStart && d.DispatchDate < dayEnd);
 
         if (dispatch is null)
         {
-            dispatch = new Dispatch { TruckLabel = truck, Notes = req.Notes };
+            dispatch = new Dispatch { UserId = uid, TruckLabel = truck, Notes = req.Notes };
             _db.Dispatches.Add(dispatch);
         }
         else if (!string.IsNullOrWhiteSpace(req.Notes))

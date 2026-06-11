@@ -3,6 +3,7 @@ namespace SalesApp.Api.Models;
 public class Dispatch
 {
     public int Id { get; set; }
+    public int UserId { get; set; }   // owning salesperson
     public DateTime DispatchDate { get; set; } = DateTime.UtcNow;
     public string TruckLabel { get; set; } = "Truck-1";  // single truck
     public string? Notes { get; set; }

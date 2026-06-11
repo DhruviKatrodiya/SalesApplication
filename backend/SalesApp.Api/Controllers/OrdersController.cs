@@ -39,12 +39,9 @@ public class OrdersController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
-        var query = WithIncludes();
-        if (mine)
-        {
-            var uid = CurrentUserId;
-            query = query.Where(o => o.SalesmanId == uid);   // only the salesperson's own orders
-        }
+        // Data is isolated per salesperson — always scope to the current user's own orders.
+        var uid = CurrentUserId;
+        var query = WithIncludes().Where(o => o.SalesmanId == uid);
         if (customerId is not null) query = query.Where(o => o.CustomerId == customerId);
         if (!string.IsNullOrWhiteSpace(customer))
         {
@@ -71,7 +68,7 @@ public class OrdersController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<OrderDto>> Get(int id)
     {
-        var o = await WithIncludes().FirstOrDefaultAsync(x => x.Id == id);
+        var o = await WithIncludes().FirstOrDefaultAsync(x => x.Id == id && x.SalesmanId == CurrentUserId);
         if (o is null) return NotFound();
         return Ok(Mappers.ToDto(o));
     }
@@ -79,13 +76,14 @@ public class OrdersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<OrderDto>> Create(OrderRequest req)
     {
-        if (!await _db.Customers.AnyAsync(c => c.Id == req.CustomerId))
+        var uid = CurrentUserId;
+        if (!await _db.Customers.AnyAsync(c => c.Id == req.CustomerId && c.UserId == uid))
             return BadRequest(new MessageResponse("Customer not found."));
         if (req.Items is null || req.Items.Count == 0)
             return BadRequest(new MessageResponse("At least one order item is required."));
 
         var itemIds = req.Items.Select(i => i.ItemId).ToList();
-        var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var items = await _db.Items.Where(i => itemIds.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
 
         var source = req.Source ?? OrderSource.Inventory;
 
@@ -156,18 +154,21 @@ public class OrdersController : ControllerBase
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == id);
         if (order is null) return NotFound();
-        if (order.SalesmanId != CurrentUserId) return NotOwner();
+        var uid = CurrentUserId;
+        if (order.SalesmanId != uid) return NotOwner();
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and can no longer be edited."));
         if (req.Items is null || req.Items.Count == 0)
             return BadRequest(new MessageResponse("At least one order item is required."));
+        if (!await _db.Customers.AnyAsync(c => c.Id == req.CustomerId && c.UserId == uid))
+            return BadRequest(new MessageResponse("Customer not found."));
 
         var newSource = req.Source ?? order.Source;
 
         // Load every item involved (old lines + new lines) so stock can be reconciled.
         var oldLines = order.Items.Select(i => new { i.ItemId, i.Quantity }).ToList();
         var allIds = oldLines.Select(l => l.ItemId).Concat(req.Items.Select(i => i.ItemId)).Distinct().ToList();
-        var items = await _db.Items.Where(i => allIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var items = await _db.Items.Where(i => allIds.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
 
         // 1) Return the original quantities to the order's CURRENT (old) source bucket.
         foreach (var ol in oldLines)
