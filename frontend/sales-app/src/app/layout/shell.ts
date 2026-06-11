@@ -43,7 +43,8 @@ export class Shell {
     { label: 'Dispatch (Truck)', icon: 'local_shipping', path: '/dispatch' },
     { label: 'Customers', icon: 'people', path: '/customers' },
     { label: 'Routes', icon: 'route', path: '/routes' },
-    { label: 'Orders', icon: 'receipt_long', path: '/orders' },
+    { label: 'Customer Orders', icon: 'receipt_long', path: '/orders' },
+    { label: 'My Orders', icon: 'assignment_ind', path: '/my-orders' },
     { label: 'Reports', icon: 'bar_chart', path: '/reports' },
   ];
 

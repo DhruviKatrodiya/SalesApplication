@@ -8,6 +8,10 @@ public class Order
     public int CustomerId { get; set; }
     public Customer? Customer { get; set; }
 
+    // The salesperson who owns this order (its creator).
+    public int? SalesmanId { get; set; }
+    public AppUser? Salesman { get; set; }
+
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     public DateTime? DeliveryDate { get; set; }
 

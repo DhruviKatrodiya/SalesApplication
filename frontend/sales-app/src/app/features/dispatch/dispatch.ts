@@ -85,7 +85,7 @@ export class Dispatch implements OnInit {
     setTimeout(() => this.itemSearchInput()?.nativeElement.focus());
   }
 
-  truckLabel = signal('Truck-1');   // truck the next added line is assigned to
+  truckLabel = signal('');   // entered manually; not pre-filled
   notes = signal('');
   selectedItemId = signal<number | null>(null);
   qty = signal<number>(1);
@@ -181,7 +181,8 @@ export class Dispatch implements OnInit {
     if (!id || q <= 0) return;
     const item = this.items().find(i => i.id === id);
     if (!item) return;
-    const truck = (this.truckLabel() || 'Truck-1').trim();
+    const truck = this.truckLabel().trim();
+    if (!truck) { this.snack.open('Enter a truck name first.', 'Close', { duration: 2500 }); return; }
 
     // Merge only when the same item is added to the same truck.
     const existing = this.cart().find(c => c.itemId === id && c.truckLabel === truck);

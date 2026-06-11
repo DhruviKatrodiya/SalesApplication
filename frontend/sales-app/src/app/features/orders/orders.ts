@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import {
   Order, Customer, Item, OrderStatus, PaymentStatus,
@@ -39,6 +40,11 @@ export class Orders implements OnInit {
   private api = inject(ApiService);
   private dialog = inject(MatDialog);
   private snack = inject(MatSnackBar);
+  private route = inject(ActivatedRoute);
+
+  // Route data: the "My Orders" route sets mine=true; the Orders route shows all.
+  readonly mine = (this.route.snapshot.data['mine'] as boolean) ?? false;
+  readonly pageTitle = (this.route.snapshot.data['title'] as string) ?? 'Orders';
 
   orders = signal<Order[]>([]);
   customers = signal<Customer[]>([]);
@@ -93,6 +99,7 @@ export class Orders implements OnInit {
       orderDate: d ? this.toIsoDate(d) : undefined,
       status: this.deliveryStatusFilter() ?? undefined,
       paymentStatus: this.paidStatusFilter() ?? undefined,
+      mine: this.mine || undefined,
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
     }).subscribe(res => {

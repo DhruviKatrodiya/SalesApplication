@@ -1,0 +1,83 @@
+<div class="page">
+  <div class="page-header">
+    <h1>My Orders <span style="font:var(--mat-sys-title-medium); color:var(--mat-sys-on-surface-variant)">— Inventory Requests</span></h1>
+    <button mat-flat-button color="primary" (click)="create()"><mat-icon>add</mat-icon> New Request</button>
+  </div>
+
+  <mat-card class="table-card">
+    <mat-card-content>
+      <div class="row" style="margin-bottom:16px">
+        <mat-form-field appearance="fill" style="width:200px" subscriptSizing="dynamic">
+          <mat-label>Status</mat-label>
+          <mat-select [ngModel]="statusFilter()" (ngModelChange)="setStatusFilter($event)">
+            <mat-option [value]="null">All</mat-option>
+            @for (s of statusOptions; track s.value) { <mat-option [value]="s.value">{{ s.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <table mat-table [dataSource]="requests()">
+        <ng-container matColumnDef="requestNumber">
+          <th mat-header-cell *matHeaderCellDef>Request #</th>
+          <td mat-cell *matCellDef="let r">{{ r.requestNumber }}</td>
+        </ng-container>
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let r">{{ r.createdAt | date:'mediumDate' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="items">
+          <th mat-header-cell *matHeaderCellDef>Items</th>
+          <td mat-cell *matCellDef="let r">
+            @for (it of r.items; track it.itemId) { <span class="chip chip-ok" style="margin:2px">{{ it.itemName }} × {{ it.quantity }}</span> }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let r"><span [class]="statusChipClass(r.status)">{{ statusLabel[r.status] }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="total">
+          <th mat-header-cell *matHeaderCellDef>Total</th>
+          <td mat-cell *matCellDef="let r">{{ r.totalAmount | currency:'INR' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="remaining">
+          <th mat-header-cell *matHeaderCellDef>Remaining</th>
+          <td mat-cell *matCellDef="let r">{{ r.remainingAmount | currency:'INR' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="payment">
+          <th mat-header-cell *matHeaderCellDef>Payment</th>
+          <td mat-cell *matCellDef="let r"><span [class]="payChipClass(r.paymentStatus)">{{ paymentLabel[r.paymentStatus] }}</span></td>
+        </ng-container>
+        <ng-container matColumnDef="notes">
+          <th mat-header-cell *matHeaderCellDef>Notes</th>
+          <td mat-cell *matCellDef="let r">{{ r.notes }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button matTooltip="Payments" (click)="managePayments(r)"><mat-icon>payments</mat-icon></button>
+            @if (r.status === Status.Pending) {
+              <button mat-icon-button matTooltip="Mark fulfilled (restock)" (click)="fulfill(r)"><mat-icon>check_circle</mat-icon></button>
+              <button mat-icon-button matTooltip="Edit" (click)="edit(r)"><mat-icon>edit</mat-icon></button>
+              <button mat-icon-button matTooltip="Delete" (click)="remove(r)"><mat-icon>delete</mat-icon></button>
+            } @else if (r.status === Status.Fulfilled) {
+              <button mat-icon-button matTooltip="Mark done" (click)="markDone(r)"><mat-icon>task_alt</mat-icon></button>
+            } @else {
+              <button mat-icon-button matTooltip="Delete" (click)="remove(r)"><mat-icon>delete</mat-icon></button>
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+      @if (!requests().length) {
+        @if (statusFilter() != null) {
+          <div class="empty">No requests with this status.</div>
+        } @else {
+          <div class="empty">No inventory requests yet. Click "New Request".</div>
+        }
+      }
+      <mat-paginator [length]="pager.total()" [pageSize]="pager.pageSize()" [pageIndex]="pager.pageIndex()"
+        [pageSizeOptions]="pageSizeOptions" (page)="pager.onPage($event)" showFirstLastButtons />
+    </mat-card-content>
+  </mat-card>
+</div>

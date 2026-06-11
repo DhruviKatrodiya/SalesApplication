@@ -30,3 +30,12 @@ public enum OrderSource
     Inventory = 0,   // deduct from inventory/godown stock only
     Dispatch = 1     // deduct stock AND log a truck dispatch
 }
+
+/// <summary>Lifecycle of a salesperson's inventory/stock request ("My Orders").</summary>
+public enum StockRequestStatus
+{
+    Pending = 0,     // submitted, awaiting stock
+    Fulfilled = 1,   // stock received -> added to inventory
+    Cancelled = 2,
+    Done = 3         // fulfilled and closed/completed
+}

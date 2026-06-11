@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,12 @@ public class PaymentsController : ControllerBase
 {
     private readonly AppDbContext _db;
     public PaymentsController(AppDbContext db) => _db = db;
+
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+
+    private ObjectResult NotOwner() =>
+        StatusCode(403, new MessageResponse("You can only manage payments for your own orders."));
 
     private static PaymentDto Map(Payment p) =>
         new(p.Id, p.OrderId, p.Amount, p.PaymentDate, p.Method, p.Note);
@@ -39,6 +46,7 @@ public class PaymentsController : ControllerBase
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == req.OrderId);
         if (order is null) return BadRequest(new MessageResponse("Order not found."));
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
         if (req.Amount <= 0) return BadRequest(new MessageResponse("Amount must be greater than zero."));
 
         var payment = new Payment
@@ -66,6 +74,7 @@ public class PaymentsController : ControllerBase
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == orderId);
         if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
 
         var remaining = order.TotalAmount - order.Payments.Sum(p => p.Amount);
         if (remaining > 0)
@@ -89,6 +98,7 @@ public class PaymentsController : ControllerBase
     {
         var payment = await _db.Payments.FindAsync(id);
         if (payment is null) return NotFound();
+        if (!await _db.Orders.AnyAsync(o => o.Id == payment.OrderId && o.SalesmanId == CurrentUserId)) return NotOwner();
 
         var orderId = payment.OrderId;
         _db.Payments.Remove(payment);

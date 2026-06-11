@@ -38,6 +38,17 @@ body {
 }
 /* You can add global styles to this file, and also import other style files */
 
+/* Number inputs: manual entry only — hide the up/down spinner arrows everywhere. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* ---- Shared app utilities ---- */
 /* padding-bottom lives on the scrollable content (not the scroll container)
    so the last element keeps clear space above the taskbar/window edge. */

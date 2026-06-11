@@ -41,6 +41,17 @@ export interface Item {
   name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number;
 }
 
+// ---- Stock requests ("My Orders") ----
+export enum StockRequestStatus { Pending = 0, Fulfilled = 1, Cancelled = 2, Done = 3 }
+export const StockRequestStatusLabels: Record<number, string> = { 0: 'Pending', 1: 'Fulfilled', 2: 'Cancelled', 3: 'Done' };
+export interface StockRequestItem { itemId: number; itemName: string; quantity: number; currentStock: number; unitPrice: number; lineTotal: number; }
+export interface StockRequest {
+  id: number; requestNumber: string; createdAt: string; status: StockRequestStatus;
+  totalAmount: number; paidAmount: number; remainingAmount: number; paymentStatus: PaymentStatus;
+  notes?: string; items: StockRequestItem[];
+}
+export interface StockRequestPayment { id: number; stockRequestId: number; amount: number; paymentDate: string; method?: string; note?: string; }
+
 // ---- Dispatch ----
 export interface DispatchItem { itemId: number; itemName: string; quantity: number; }
 export interface Dispatch {

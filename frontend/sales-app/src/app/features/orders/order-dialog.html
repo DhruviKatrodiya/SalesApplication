@@ -59,7 +59,7 @@
       <button mat-stroked-button color="primary" (click)="addLine()"><mat-icon>add</mat-icon> Add</button>
     </div>
 
-    <table mat-table [dataSource]="lines()" class="full">
+    <table mat-table [dataSource]="lines()" [trackBy]="trackByItemId" class="full">
       <ng-container matColumnDef="srNo">
         <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
         <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>

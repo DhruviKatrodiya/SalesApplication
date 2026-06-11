@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SalesApp.Api.Data;
 
@@ -11,9 +12,11 @@ using SalesApp.Api.Data;
 namespace SalesApp.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611072348_AddStockRequests")]
+    partial class AddStockRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -438,17 +441,6 @@ namespace SalesApp.Api.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<decimal>("PaidAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("PaymentStatus")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("RemainingAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<string>("RequestNumber")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -458,10 +450,6 @@ namespace SalesApp.Api.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -481,19 +469,11 @@ namespace SalesApp.Api.Migrations
                     b.Property<int>("ItemId")
                         .HasColumnType("int");
 
-                    b.Property<decimal>("LineTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
                     b.Property<int>("StockRequestId")
                         .HasColumnType("int");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -502,37 +482,6 @@ namespace SalesApp.Api.Migrations
                     b.HasIndex("StockRequestId");
 
                     b.ToTable("StockRequestItems");
-                });
-
-            modelBuilder.Entity("SalesApp.Api.Models.StockRequestPayment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("Method")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("PaymentDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("StockRequestId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StockRequestId");
-
-                    b.ToTable("StockRequestPayments");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.SubCategory", b =>
@@ -680,17 +629,6 @@ namespace SalesApp.Api.Migrations
                     b.Navigation("StockRequest");
                 });
 
-            modelBuilder.Entity("SalesApp.Api.Models.StockRequestPayment", b =>
-                {
-                    b.HasOne("SalesApp.Api.Models.StockRequest", "StockRequest")
-                        .WithMany("Payments")
-                        .HasForeignKey("StockRequestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("StockRequest");
-                });
-
             modelBuilder.Entity("SalesApp.Api.Models.SubCategory", b =>
                 {
                     b.HasOne("SalesApp.Api.Models.Category", "Category")
@@ -732,8 +670,6 @@ namespace SalesApp.Api.Migrations
             modelBuilder.Entity("SalesApp.Api.Models.StockRequest", b =>
                 {
                     b.Navigation("Items");
-
-                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.SubCategory", b =>

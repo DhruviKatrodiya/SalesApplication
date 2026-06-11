@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import {
   Category, SubCategory, Item, Customer, CustomerSearchResult,
   Order, OrderStatus, Payment, Dispatch, ReceivedStatus,
-  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route
+  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -138,12 +138,13 @@ export class ApiService {
   deleteCustomer(id: number) { return this.http.delete(`${this.base}/customers/${id}`); }
 
   // ---- Orders ----
-  getOrders(opts?: { customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; page?: number; pageSize?: number }) {
+  getOrders(opts?: { customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.customer) p = p.set('customer', opts.customer);
     if (opts?.orderDate) p = p.set('orderDate', opts.orderDate);
     if (opts?.status != null) p = p.set('status', opts.status);
     if (opts?.paymentStatus != null) p = p.set('paymentStatus', opts.paymentStatus);
+    if (opts?.mine) p = p.set('mine', true);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Order>>(`${this.base}/orders`, { params: p });
@@ -169,6 +170,33 @@ export class ApiService {
   }
   settleOrder(orderId: number) { return this.http.post<Order>(`${this.base}/payments/settle/${orderId}`, {}); }
   deletePayment(id: number) { return this.http.delete<Order>(`${this.base}/payments/${id}`); }
+
+  // ---- Stock requests ("My Orders") ----
+  getStockRequests(opts?: { status?: number; page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.status != null) p = p.set('status', opts.status);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<StockRequest>>(`${this.base}/stock-requests`, { params: p });
+  }
+  createStockRequest(b: { notes?: string; items: { itemId: number; quantity: number; unitPrice?: number }[] }) {
+    return this.http.post<StockRequest>(`${this.base}/stock-requests`, b);
+  }
+  updateStockRequest(id: number, b: { notes?: string; items: { itemId: number; quantity: number; unitPrice?: number }[] }) {
+    return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}`, b);
+  }
+  fulfillStockRequest(id: number) { return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}/fulfill`, {}); }
+  doneStockRequest(id: number) { return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}/done`, {}); }
+  cancelStockRequest(id: number) { return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}/cancel`, {}); }
+  deleteStockRequest(id: number) { return this.http.delete(`${this.base}/stock-requests/${id}`); }
+
+  // Stock-request payments
+  getRequestPayments(requestId: number) { return this.http.get<StockRequestPayment[]>(`${this.base}/stock-request-payments/by-request/${requestId}`); }
+  addRequestPayment(b: { stockRequestId: number; amount: number; paymentDate?: string; method?: string; note?: string }) {
+    return this.http.post<StockRequest>(`${this.base}/stock-request-payments`, b);
+  }
+  settleRequest(requestId: number) { return this.http.post<StockRequest>(`${this.base}/stock-request-payments/settle/${requestId}`, {}); }
+  deleteRequestPayment(id: number) { return this.http.delete<StockRequest>(`${this.base}/stock-request-payments/${id}`); }
 
   // ---- Reports ----
   monthlyReport(year: number, month: number | undefined, page: number, pageSize: number) {

@@ -87,6 +87,8 @@ export class OrderDialog {
   );
 
   columns = ['srNo', 'item', 'qty', 'price', 'total', 'actions'];
+  // Keep rows stable across edits so number inputs don't lose focus mid-typing.
+  trackByItemId = (_: number, l: Line) => l.itemId;
   total = computed(() => this.lines().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
   isEdit = !!this.data.order;
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,12 @@ public class OrdersController : ControllerBase
     private readonly AppDbContext _db;
     public OrdersController(AppDbContext db) => _db = db;
 
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
+
+    private ObjectResult NotOwner() =>
+        StatusCode(403, new MessageResponse("You can only manage your own orders."));
+
     private IQueryable<Order> WithIncludes() =>
         _db.Orders
             .Include(o => o.Customer)
@@ -26,13 +33,18 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<PagedResult<OrderDto>>> GetAll(
         [FromQuery] string? customer, [FromQuery] DateTime? orderDate,
         [FromQuery] OrderStatus? status, [FromQuery] PaymentStatus? paymentStatus,
-        [FromQuery] int? customerId,
+        [FromQuery] int? customerId, [FromQuery] bool mine = false,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
         var query = WithIncludes();
+        if (mine)
+        {
+            var uid = CurrentUserId;
+            query = query.Where(o => o.SalesmanId == uid);   // only the salesperson's own orders
+        }
         if (customerId is not null) query = query.Where(o => o.CustomerId == customerId);
         if (!string.IsNullOrWhiteSpace(customer))
         {
@@ -81,6 +93,7 @@ public class OrdersController : ControllerBase
         {
             OrderNumber = await GenerateOrderNumberAsync(),
             CustomerId = req.CustomerId,
+            SalesmanId = CurrentUserId,   // owned by the salesperson who creates it
             OrderDate = req.OrderDate ?? DateTime.UtcNow,
             DeliveryDate = req.DeliveryDate,
             Notes = req.Notes,
@@ -143,6 +156,7 @@ public class OrdersController : ControllerBase
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.Id == id);
         if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and can no longer be edited."));
         if (req.Items is null || req.Items.Count == 0)
@@ -220,6 +234,7 @@ public class OrdersController : ControllerBase
     {
         var order = await _db.Orders.Include(o => o.Payments).FirstOrDefaultAsync(o => o.Id == id);
         if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and its status can no longer be changed."));
         order.Status = req.Status;
@@ -234,6 +249,7 @@ public class OrdersController : ControllerBase
     {
         var order = await _db.Orders.FindAsync(id);
         if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
         order.DeliveryDate = req.DeliveryDate;
         await _db.SaveChangesAsync();
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);
@@ -245,6 +261,7 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<OrderDto>> UpdateReceivedStatus(
         int id, int orderItemId, UpdateReceivedStatusRequest req)
     {
+        if (!await _db.Orders.AnyAsync(o => o.Id == id && o.SalesmanId == CurrentUserId)) return NotOwner();
         var line = await _db.OrderItems.FirstOrDefaultAsync(i => i.Id == orderItemId && i.OrderId == id);
         if (line is null) return NotFound();
         line.ReceivedStatus = req.ReceivedStatus;
@@ -268,6 +285,7 @@ public class OrdersController : ControllerBase
     {
         var order = await _db.Orders.FindAsync(id);
         if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
         _db.Orders.Remove(order);
         await _db.SaveChangesAsync();
         return NoContent();

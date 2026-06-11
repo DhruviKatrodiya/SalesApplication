@@ -1,3 +1,5 @@
+using SalesApp.Api.Models;
+
 namespace SalesApp.Api.DTOs;
 
 // Pagination
@@ -20,6 +22,19 @@ public record ItemRequest(int SubCategoryId, string Name, string? Sku, string? U
 public record ItemDto(
     int Id, int SubCategoryId, string SubCategoryName, string CategoryName,
     string Name, string? Sku, string? Unit, int StockQuantity, int DispatchStock, decimal UnitPrice);
+
+// Stock requests ("My Orders") — a salesperson's request for inventory / low-stock items
+public record StockRequestItemRequest(int ItemId, int Quantity, decimal? UnitPrice);
+public record StockRequestRequest(string? Notes, List<StockRequestItemRequest> Items);
+public record StockRequestItemDto(int ItemId, string ItemName, int Quantity, int CurrentStock, decimal UnitPrice, decimal LineTotal);
+public record StockRequestDto(
+    int Id, string RequestNumber, DateTime CreatedAt, StockRequestStatus Status,
+    decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount, PaymentStatus PaymentStatus,
+    string? Notes, List<StockRequestItemDto> Items);
+
+// Stock-request payments
+public record StockRequestPaymentRequest(int StockRequestId, decimal Amount, DateTime? PaymentDate, string? Method, string? Note);
+public record StockRequestPaymentDto(int Id, int StockRequestId, decimal Amount, DateTime PaymentDate, string? Method, string? Note);
 
 // Dispatch
 public record DispatchItemRequest(int ItemId, int Quantity);
