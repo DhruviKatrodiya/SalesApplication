@@ -30,7 +30,7 @@ export class Dashboard implements OnInit {
     forkJoin({
       items: this.api.getAllItems(),
       customers: this.api.getAllCustomers(),
-      orders: this.api.getOrders()
+      orders: this.api.getAllOrders()
     }).subscribe(r => {
       this.items.set(r.items);
       this.customers.set(r.customers);

@@ -6,14 +6,15 @@
   <mat-card>
     <mat-card-content>
       <div class="row">
-        <mat-button-toggle-group [ngModel]="mode()" (ngModelChange)="mode.set($event); run()">
+        <mat-button-toggle-group [ngModel]="mode()" (ngModelChange)="setMode($event)">
+          <mat-button-toggle value="daily">Daily</mat-button-toggle>
           <mat-button-toggle value="monthly">Monthly</mat-button-toggle>
           <mat-button-toggle value="yearly">Yearly</mat-button-toggle>
         </mat-button-toggle-group>
 
         <mat-form-field appearance="fill" style="width:140px">
           <mat-label>Year</mat-label>
-          <mat-select [ngModel]="year()" (ngModelChange)="year.set($event); run()">
+          <mat-select [ngModel]="year()" (ngModelChange)="setYear($event)">
             @for (y of years; track y) { <mat-option [value]="y">{{ y }}</mat-option> }
           </mat-select>
         </mat-form-field>
@@ -21,8 +22,16 @@
         @if (mode() === 'monthly') {
           <mat-form-field appearance="fill" style="width:160px">
             <mat-label>Month (optional)</mat-label>
-            <mat-select [ngModel]="month()" (ngModelChange)="month.set($event); run()">
+            <mat-select [ngModel]="month()" (ngModelChange)="setMonth($event)">
               <mat-option [value]="null">All months</mat-option>
+              @for (m of months; track m.v) { <mat-option [value]="m.v">{{ m.n }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+        }
+        @if (mode() === 'daily') {
+          <mat-form-field appearance="fill" style="width:160px">
+            <mat-label>Month</mat-label>
+            <mat-select [ngModel]="month()" (ngModelChange)="setMonth($event)">
               @for (m of months; track m.v) { <mat-option [value]="m.v">{{ m.n }}</mat-option> }
             </mat-select>
           </mat-form-field>
@@ -42,14 +51,14 @@
     </div>
 
     <mat-card class="table-card mt-16">
-      <mat-card-header><mat-card-title>Breakdown by Month</mat-card-title></mat-card-header>
+      <mat-card-header><mat-card-title>Breakdown by {{ mode() === 'daily' ? 'Day' : 'Month' }}</mat-card-title></mat-card-header>
       <mat-card-content>
-        <table mat-table [dataSource]="rowsPager.paged()">
+        <table mat-table [dataSource]="s.rows">
           <ng-container matColumnDef="srNo">
             <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
             <td mat-cell *matCellDef="let row; let i = index">{{ rowsPager.pageIndex() * rowsPager.pageSize() + i + 1 }}</td>
           </ng-container>
-          <ng-container matColumnDef="label"><th mat-header-cell *matHeaderCellDef>Month</th><td mat-cell *matCellDef="let r">{{ r.label }}</td></ng-container>
+          <ng-container matColumnDef="label"><th mat-header-cell *matHeaderCellDef>{{ mode() === 'daily' ? 'Day' : 'Month' }}</th><td mat-cell *matCellDef="let r">{{ r.label }}</td></ng-container>
           <ng-container matColumnDef="orders"><th mat-header-cell *matHeaderCellDef>Orders</th><td mat-cell *matCellDef="let r">{{ r.orderCount }}</td></ng-container>
           <ng-container matColumnDef="total"><th mat-header-cell *matHeaderCellDef>Total</th><td mat-cell *matCellDef="let r">{{ r.totalAmount | currency:'INR' }}</td></ng-container>
           <ng-container matColumnDef="paid"><th mat-header-cell *matHeaderCellDef>Paid</th><td mat-cell *matCellDef="let r">{{ r.paidAmount | currency:'INR' }}</td></ng-container>
@@ -57,7 +66,7 @@
           <tr mat-header-row *matHeaderRowDef="rowColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: rowColumns"></tr>
         </table>
-        @if (!s.rows.length) { <div class="empty">No data for this period.</div> }
+        @if (!s.rowsTotal) { <div class="empty">No data for this period.</div> }
         <mat-paginator [length]="rowsPager.total()" [pageSize]="rowsPager.pageSize()" [pageIndex]="rowsPager.pageIndex()"
           [pageSizeOptions]="pageSizeOptions" (page)="rowsPager.onPage($event)" showFirstLastButtons />
       </mat-card-content>
@@ -67,7 +76,7 @@
   <mat-card class="table-card mt-16">
     <mat-card-header><mat-card-title>Per-Customer Summary (Pending vs Delivered)</mat-card-title></mat-card-header>
     <mat-card-content>
-      <table mat-table [dataSource]="custPager.paged()">
+      <table mat-table [dataSource]="byCustomer()">
         <ng-container matColumnDef="srNo">
           <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
           <td mat-cell *matCellDef="let row; let i = index">{{ custPager.pageIndex() * custPager.pageSize() + i + 1 }}</td>

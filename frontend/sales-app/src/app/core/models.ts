@@ -1,6 +1,6 @@
 // ---- Enums (numeric, mirror the backend) ----
 export enum OrderStatus { Pending = 0, Dispatched = 1, Delivered = 2, Completed = 3, Remaining = 4 }
-export enum PaymentStatus { Pending = 0, Advance = 1, Paid = 2 }
+export enum PaymentStatus { Pending = 0, Advance = 1, Paid = 2, Partial = 3 }
 export enum ReceivedStatus { Pending = 0, Remaining = 1, Completed = 2 }
 export enum OrderSource { Inventory = 0, Dispatch = 1 }
 
@@ -8,7 +8,7 @@ export const OrderStatusLabels: Record<number, string> = {
   0: 'Pending', 1: 'Dispatched', 2: 'Delivered', 3: 'Completed', 4: 'Remaining'
 };
 export const PaymentStatusLabels: Record<number, string> = {
-  0: 'Pending', 1: 'Advance', 2: 'Paid'
+  0: 'Pending', 1: 'Advance', 2: 'Paid', 3: 'Partial'
 };
 export const ReceivedStatusLabels: Record<number, string> = {
   0: 'Pending', 1: 'Remaining', 2: 'Completed'
@@ -86,7 +86,7 @@ export interface ReportRow {
 export interface ReportSummary {
   period: string; totalOrders: number;
   totalAmount: number; totalPaid: number; totalRemaining: number;
-  pendingOrders: number; deliveredOrders: number; rows: ReportRow[];
+  pendingOrders: number; deliveredOrders: number; rowsTotal: number; rows: ReportRow[];
 }
 export interface CustomerReportRow {
   customerId: number; customerName: string;

@@ -23,15 +23,37 @@ public class OrdersController : ControllerBase
             .Include(o => o.Payments);
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<OrderDto>>> GetAll(
-        [FromQuery] int? customerId, [FromQuery] OrderStatus? status)
+    public async Task<ActionResult<PagedResult<OrderDto>>> GetAll(
+        [FromQuery] string? customer, [FromQuery] DateTime? orderDate,
+        [FromQuery] OrderStatus? status, [FromQuery] PaymentStatus? paymentStatus,
+        [FromQuery] int? customerId,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         var query = WithIncludes();
         if (customerId is not null) query = query.Where(o => o.CustomerId == customerId);
+        if (!string.IsNullOrWhiteSpace(customer))
+        {
+            var t = customer.Trim();
+            query = query.Where(o => o.Customer!.Name.Contains(t));
+        }
+        if (orderDate is not null)
+        {
+            var d = orderDate.Value.Date;
+            var next = d.AddDays(1);
+            query = query.Where(o => o.OrderDate >= d && o.OrderDate < next);
+        }
         if (status is not null) query = query.Where(o => o.Status == status);
+        if (paymentStatus is not null) query = query.Where(o => o.PaymentStatus == paymentStatus);
 
-        var list = await query.OrderByDescending(o => o.OrderDate).ToListAsync();
-        return Ok(list.Select(Mappers.ToDto));
+        var ordered = query.OrderByDescending(o => o.OrderDate);
+        var total = await ordered.CountAsync();
+        var items = (await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync())
+            .Select(Mappers.ToDto).ToList();
+
+        return Ok(new PagedResult<OrderDto>(items, total, page, pageSize));
     }
 
     [HttpGet("{id:int}")]
@@ -196,11 +218,12 @@ public class OrdersController : ControllerBase
     [HttpPut("{id:int}/status")]
     public async Task<ActionResult<OrderDto>> UpdateStatus(int id, UpdateOrderStatusRequest req)
     {
-        var order = await _db.Orders.FindAsync(id);
+        var order = await _db.Orders.Include(o => o.Payments).FirstOrDefaultAsync(o => o.Id == id);
         if (order is null) return NotFound();
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and its status can no longer be changed."));
         order.Status = req.Status;
+        OrderMath.Recalculate(order);   // payment status may shift Advance <-> Partial with delivery state
         await _db.SaveChangesAsync();
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);
         return Ok(Mappers.ToDto(saved));
@@ -228,11 +251,12 @@ public class OrdersController : ControllerBase
         await _db.SaveChangesAsync();
 
         // If every line is completed, mark the order completed; otherwise keep current status.
-        var order = await _db.Orders.Include(o => o.Items).FirstAsync(o => o.Id == id);
+        var order = await _db.Orders.Include(o => o.Items).Include(o => o.Payments).FirstAsync(o => o.Id == id);
         if (order.Items.All(i => i.ReceivedStatus == ReceivedStatus.Completed))
             order.Status = OrderStatus.Completed;
         else if (order.Items.Any(i => i.ReceivedStatus == ReceivedStatus.Remaining))
             order.Status = OrderStatus.Remaining;
+        OrderMath.Recalculate(order);   // keep payment status (Advance/Partial) in sync with delivery state
         await _db.SaveChangesAsync();
 
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);

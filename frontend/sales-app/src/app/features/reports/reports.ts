@@ -11,7 +11,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { ApiService } from '../../core/api.service';
 import { ReportSummary, CustomerReportRow } from '../../core/models';
-import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-reports',
@@ -24,7 +24,7 @@ import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 export class Reports implements OnInit {
   private api = inject(ApiService);
 
-  mode = signal<'monthly' | 'yearly'>('monthly');
+  mode = signal<'daily' | 'monthly' | 'yearly'>('monthly');
   year = signal<number>(new Date().getFullYear());
   month = signal<number | null>(null);
 
@@ -42,21 +42,68 @@ export class Reports implements OnInit {
   custColumns = ['srNo', 'customer', 'orders', 'pending', 'delivered', 'total', 'paid', 'remaining'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
-  rowsPager = createPager(() => this.summary()?.rows ?? []);
-  custPager = createPager(() => this.byCustomer());
+  rowsPager = createServerPager(() => this.run());             // breakdown rows paged on the server
+  custPager = createServerPager(() => this.loadByCustomer());  // per-customer list paged on the server
 
   ngOnInit() { this.run(); this.loadByCustomer(); }
 
+  // A filter change resets the breakdown to the first page, then reloads.
+  private reloadReport() { this.rowsPager.reset(); this.run(); }
+
+  setMode(m: 'daily' | 'monthly' | 'yearly') {
+    this.mode.set(m);
+    // Daily defaults to the current month and year.
+    if (m === 'daily') {
+      const now = new Date();
+      this.year.set(now.getFullYear());
+      this.month.set(now.getMonth() + 1);
+    }
+    this.reloadReport();
+  }
+
+  setYear(y: number) { this.year.set(y); this.reloadReport(); }
+  setMonth(m: number | null) { this.month.set(m); this.reloadReport(); }
+
+  /** Reload callback for the breakdown pager — fetches the current breakdown page from the server. */
   run() {
-    this.rowsPager.reset();
+    const page = this.rowsPager.pageIndex() + 1;
+    const pageSize = this.rowsPager.pageSize();
     if (this.mode() === 'monthly') {
-      this.api.monthlyReport(this.year(), this.month() ?? undefined).subscribe(s => this.summary.set(s));
+      this.api.monthlyReport(this.year(), this.month() ?? undefined, page, pageSize).subscribe(s => this.applyReport(s));
+    } else if (this.mode() === 'daily') {
+      // Daily needs a specific month — default to the current one if none chosen.
+      const m = this.month() ?? (new Date().getMonth() + 1);
+      if (this.month() == null) this.month.set(m);
+      this.api.dailyReport(this.year(), m, page, pageSize).subscribe(s => this.applyReport(s));
     } else {
-      this.api.yearlyReport(this.year()).subscribe(s => this.summary.set(s));
+      this.api.yearlyReport(this.year(), page, pageSize).subscribe(s => this.applyReport(s));
     }
   }
 
+  private applyReport(s: ReportSummary) {
+    const maxIndex = Math.max(0, Math.ceil(s.rowsTotal / this.rowsPager.pageSize()) - 1);
+    if (this.rowsPager.pageIndex() > maxIndex) {
+      this.rowsPager.pageIndex.set(maxIndex);
+      this.run();
+      return;
+    }
+    this.summary.set(s);
+    this.rowsPager.total.set(s.rowsTotal);
+  }
+
   loadByCustomer() {
-    this.api.customerReport().subscribe(r => this.byCustomer.set(r));
+    this.api.customerReport({
+      page: this.custPager.pageIndex() + 1,
+      pageSize: this.custPager.pageSize()
+    }).subscribe(res => {
+      const maxIndex = Math.max(0, Math.ceil(res.total / this.custPager.pageSize()) - 1);
+      if (this.custPager.pageIndex() > maxIndex) {
+        this.custPager.pageIndex.set(maxIndex);
+        this.loadByCustomer();
+        return;
+      }
+      this.byCustomer.set(res.items);
+      this.custPager.total.set(res.total);
+    });
   }
 }

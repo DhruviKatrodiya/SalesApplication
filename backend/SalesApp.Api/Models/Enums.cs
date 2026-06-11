@@ -12,8 +12,9 @@ public enum OrderStatus
 public enum PaymentStatus
 {
     Pending = 0,
-    Advance = 1,   // partially paid
-    Paid = 2
+    Advance = 1,   // partially paid, before dispatch
+    Paid = 2,
+    Partial = 3    // partially paid, after the order is dispatched/delivered (balance due)
 }
 
 public enum ReceivedStatus

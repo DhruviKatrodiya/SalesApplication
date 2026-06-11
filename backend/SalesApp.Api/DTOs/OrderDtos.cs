@@ -43,4 +43,4 @@ public record CustomerSearchResult(
 public record ReportRow(string Label, int OrderCount, decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount);
 public record ReportSummary(
     string Period, int TotalOrders, decimal TotalAmount, decimal TotalPaid, decimal TotalRemaining,
-    int PendingOrders, int DeliveredOrders, List<ReportRow> Rows);
+    int PendingOrders, int DeliveredOrders, int RowsTotal, List<ReportRow> Rows);

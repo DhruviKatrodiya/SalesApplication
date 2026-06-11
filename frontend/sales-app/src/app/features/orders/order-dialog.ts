@@ -54,7 +54,12 @@ export class OrderDialog {
   data = inject<DialogData>(MAT_DIALOG_DATA);
 
   customerId = signal<number | null>(this.data.order?.customerId ?? null);
-  deliveryDate = signal<Date | null>(this.data.order?.deliveryDate ? new Date(this.data.order.deliveryDate) : null);
+  // Edit: keep the order's existing delivery date (may be unset). New order: default to today (still editable).
+  deliveryDate = signal<Date | null>(
+    this.data.order
+      ? (this.data.order.deliveryDate ? new Date(this.data.order.deliveryDate) : null)
+      : new Date()
+  );
   notes = signal<string>(this.data.order?.notes ?? '');
   status = signal<OrderStatus>(this.data.order?.status ?? OrderStatus.Pending);
   statusOptions = Object.entries(OrderStatusLabels).map(([v, l]) => ({ value: +v, label: l }));

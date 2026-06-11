@@ -23,7 +23,7 @@ import { OrderDialog } from './order-dialog';
 import { PaymentDialog } from './payment-dialog';
 import { OrderItemsDialog } from './order-items-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
-import { createPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-orders',
@@ -50,20 +50,6 @@ export class Orders implements OnInit {
   deliveryStatusFilter = signal<OrderStatus | null>(null);
   paidStatusFilter = signal<PaymentStatus | null>(null);
 
-  filtered = computed<Order[]>(() => {
-    const name = this.customerFilter().trim().toLowerCase();
-    const date = this.orderDateFilter();
-    const delivery = this.deliveryStatusFilter();
-    const paid = this.paidStatusFilter();
-    return this.orders().filter(o => {
-      if (name && !o.customerName.toLowerCase().includes(name)) return false;
-      if (delivery != null && o.status !== delivery) return false;
-      if (paid != null && o.paymentStatus !== paid) return false;
-      if (date && !sameDay(new Date(o.orderDate), date)) return false;
-      return true;
-    });
-  });
-
   hasFilters = computed(() =>
     !!this.customerFilter() || !!this.orderDateFilter() ||
     this.deliveryStatusFilter() != null || this.paidStatusFilter() != null);
@@ -76,19 +62,20 @@ export class Orders implements OnInit {
   paymentOptions = Object.entries(PaymentStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
-  pager = createPager(() => this.filtered());
+  pager = createServerPager(() => this.load());
 
-  // Filter setters (reset pagination to the first page on any change)
-  setCustomerFilter(v: string) { this.customerFilter.set(v); this.pager.reset(); }
-  setOrderDateFilter(v: Date | null) { this.orderDateFilter.set(v); this.pager.reset(); }
-  setDeliveryStatusFilter(v: OrderStatus | null) { this.deliveryStatusFilter.set(v); this.pager.reset(); }
-  setPaidStatusFilter(v: PaymentStatus | null) { this.paidStatusFilter.set(v); this.pager.reset(); }
+  // Filter setters (reset to the first page and reload from the server on any change)
+  private reload() { this.pager.reset(); this.load(); }
+  setCustomerFilter(v: string) { this.customerFilter.set(v); this.reload(); }
+  setOrderDateFilter(v: Date | null) { this.orderDateFilter.set(v); this.reload(); }
+  setDeliveryStatusFilter(v: OrderStatus | null) { this.deliveryStatusFilter.set(v); this.reload(); }
+  setPaidStatusFilter(v: PaymentStatus | null) { this.paidStatusFilter.set(v); this.reload(); }
   clearFilters() {
     this.customerFilter.set('');
     this.orderDateFilter.set(null);
     this.deliveryStatusFilter.set(null);
     this.paidStatusFilter.set(null);
-    this.pager.reset();
+    this.reload();
   }
 
   ngOnInit() {
@@ -100,7 +87,31 @@ export class Orders implements OnInit {
   }
 
   load() {
-    this.api.getOrders().subscribe(list => this.orders.set(list));
+    const d = this.orderDateFilter();
+    this.api.getOrders({
+      customer: this.customerFilter() || undefined,
+      orderDate: d ? this.toIsoDate(d) : undefined,
+      status: this.deliveryStatusFilter() ?? undefined,
+      paymentStatus: this.paidStatusFilter() ?? undefined,
+      page: this.pager.pageIndex() + 1,
+      pageSize: this.pager.pageSize()
+    }).subscribe(res => {
+      const maxIndex = Math.max(0, Math.ceil(res.total / this.pager.pageSize()) - 1);
+      if (this.pager.pageIndex() > maxIndex) {
+        this.pager.pageIndex.set(maxIndex);
+        this.load();
+        return;
+      }
+      this.orders.set(res.items);
+      this.pager.total.set(res.total);
+    });
+  }
+
+  private toIsoDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
 
   create() {
@@ -167,10 +178,4 @@ export class Orders implements OnInit {
 
   statusChipClass(status: number): string { return 'chip chip-' + (this.orderStatusLabel[status] ?? '').toLowerCase(); }
   payChipClass(status: number): string { return 'chip chip-' + (this.paymentStatusLabel[status] ?? '').toLowerCase(); }
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear()
-    && a.getMonth() === b.getMonth()
-    && a.getDate() === b.getDate();
 }

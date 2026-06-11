@@ -138,11 +138,19 @@ export class ApiService {
   deleteCustomer(id: number) { return this.http.delete(`${this.base}/customers/${id}`); }
 
   // ---- Orders ----
-  getOrders(opts?: { customerId?: number; status?: OrderStatus }) {
+  getOrders(opts?: { customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; page?: number; pageSize?: number }) {
     let p = new HttpParams();
-    if (opts?.customerId) p = p.set('customerId', opts.customerId);
+    if (opts?.customer) p = p.set('customer', opts.customer);
+    if (opts?.orderDate) p = p.set('orderDate', opts.orderDate);
     if (opts?.status != null) p = p.set('status', opts.status);
-    return this.http.get<Order[]>(`${this.base}/orders`, { params: p });
+    if (opts?.paymentStatus != null) p = p.set('paymentStatus', opts.paymentStatus);
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Order>>(`${this.base}/orders`, { params: p });
+  }
+  /** Full order list (e.g. dashboard stats), independent of table paging/filters. */
+  getAllOrders() {
+    return this.getOrders({ page: 1, pageSize: 10000 }).pipe(map(r => r.items));
   }
   getOrder(id: number) { return this.http.get<Order>(`${this.base}/orders/${id}`); }
   createOrder(b: any) { return this.http.post<Order>(`${this.base}/orders`, b); }
@@ -163,14 +171,23 @@ export class ApiService {
   deletePayment(id: number) { return this.http.delete<Order>(`${this.base}/payments/${id}`); }
 
   // ---- Reports ----
-  monthlyReport(year: number, month?: number) {
-    let p = new HttpParams().set('year', year);
+  monthlyReport(year: number, month: number | undefined, page: number, pageSize: number) {
+    let p = new HttpParams().set('year', year).set('page', page).set('pageSize', pageSize);
     if (month) p = p.set('month', month);
     return this.http.get<ReportSummary>(`${this.base}/reports/monthly`, { params: p });
   }
-  yearlyReport(year: number) {
-    const p = new HttpParams().set('year', year);
+  dailyReport(year: number, month: number, page: number, pageSize: number) {
+    const p = new HttpParams().set('year', year).set('month', month).set('page', page).set('pageSize', pageSize);
+    return this.http.get<ReportSummary>(`${this.base}/reports/daily`, { params: p });
+  }
+  yearlyReport(year: number, page: number, pageSize: number) {
+    const p = new HttpParams().set('year', year).set('page', page).set('pageSize', pageSize);
     return this.http.get<ReportSummary>(`${this.base}/reports/yearly`, { params: p });
   }
-  customerReport() { return this.http.get<CustomerReportRow[]>(`${this.base}/reports/by-customer`); }
+  customerReport(opts?: { page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<CustomerReportRow>>(`${this.base}/reports/by-customer`, { params: p });
+  }
 }

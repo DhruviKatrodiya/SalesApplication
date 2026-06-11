@@ -9,6 +9,7 @@
         <span class="chip"
           [class.chip-paid]="order().paymentStatus === 2"
           [class.chip-advance]="order().paymentStatus === 1"
+          [class.chip-partial]="order().paymentStatus === 3"
           [class.chip-pending]="order().paymentStatus === 0">{{ payLabel[order().paymentStatus] }}</span>
       </div>
     </div>

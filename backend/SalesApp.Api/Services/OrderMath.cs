@@ -17,7 +17,9 @@ public static class OrderMath
             order.PaymentStatus = PaymentStatus.Pending;
         else if (order.PaidAmount >= order.TotalAmount)
             order.PaymentStatus = PaymentStatus.Paid;
+        else if (order.Status == OrderStatus.Pending)
+            order.PaymentStatus = PaymentStatus.Advance;   // partial, paid before dispatch
         else
-            order.PaymentStatus = PaymentStatus.Advance;
+            order.PaymentStatus = PaymentStatus.Partial;   // partial, but already dispatched/delivered
     }
 }

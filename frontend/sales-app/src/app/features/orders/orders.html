@@ -41,7 +41,7 @@
         }
       </div>
 
-      <table mat-table [dataSource]="pager.paged()">
+      <table mat-table [dataSource]="orders()">
         <ng-container matColumnDef="orderNumber">
           <th mat-header-cell *matHeaderCellDef>Order #</th>
           <td mat-cell *matCellDef="let o">{{ o.orderNumber }}</td>
