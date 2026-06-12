@@ -147,7 +147,15 @@ export class Categories implements OnInit {
     this.dialog.open(SubCategoryDialog, {
       data: { categories: this.allCategories(), subCategory: null, defaultCategoryId: sel?.id }
     }).afterClosed().subscribe(res => {
-      if (res) this.api.createSubCategory(res).subscribe(() => { this.snack.open('Sub-category added', 'Close', { duration: 2000 }); this.loadCategories(); this.loadSubs(); });
+      if (!res) return;
+      this.api.createSubCategory(res).subscribe(() => {
+        this.snack.open('Sub-category added', 'Close', { duration: 2000 });
+        this.loadCategories();
+        // Select the new sub-category's parent so it shows up in the list (newest sorts first).
+        const parent = this.allCategories().find(c => c.id === res.categoryId);
+        if (parent) this.select(parent);
+        else this.loadSubs();
+      });
     });
   }
   editSub(s: SubCategory) {

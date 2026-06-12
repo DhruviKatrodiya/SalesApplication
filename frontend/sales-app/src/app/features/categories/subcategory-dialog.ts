@@ -20,7 +20,8 @@ interface DialogData { categories: Category[]; subCategory: SubCategory | null; 
         <mat-form-field appearance="fill" class="full">
           <mat-label>Category</mat-label>
           <mat-select formControlName="categoryId" required
-                      (opened)="onSelectOpened()" (closed)="categorySearch.set('')">
+                      (opened)="onSelectOpened()"
+                      (closed)="categorySearch.set(''); form.controls.categoryId.markAsTouched()">
             <div class="select-search">
               <mat-icon class="select-search-icon">search</mat-icon>
               <input #categorySearchInput type="text" class="select-search-input" placeholder="Search category…"
@@ -36,7 +37,7 @@ interface DialogData { categories: Category[]; subCategory: SubCategory | null; 
               <div class="select-empty">No categories found</div>
             }
           </mat-select>
-          @if (form.controls.categoryId.hasError('required')) { <mat-error>Category is required</mat-error> }
+          @if (form.controls.categoryId.hasError('required') || form.controls.categoryId.hasError('min')) { <mat-error>Category is required</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Name</mat-label>
@@ -98,7 +99,7 @@ export class SubCategoryDialog {
   });
 
   form = this.fb.nonNullable.group({
-    categoryId: [this.data.subCategory?.categoryId ?? this.data.defaultCategoryId ?? 0, Validators.required],
+    categoryId: [this.data.subCategory?.categoryId ?? this.data.defaultCategoryId ?? 0, [Validators.required, Validators.min(1)]],
     name: [this.data.subCategory?.name ?? '', Validators.required],
     description: [this.data.subCategory?.description ?? '']
   });
@@ -109,7 +110,10 @@ export class SubCategoryDialog {
   }
 
   save() {
-    if (this.form.invalid) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
     this.ref.close(this.form.getRawValue());
   }
 }

@@ -52,7 +52,7 @@ input[type="number"]::-webkit-inner-spin-button {
 /* ---- Shared app utilities ---- */
 /* padding-bottom lives on the scrollable content (not the scroll container)
    so the last element keeps clear space above the taskbar/window edge. */
-.page { max-width: 1200px; margin: 0 auto; padding-bottom: 40px; }
+.page { width: 100%; padding-bottom: 40px; }
 .page h1 { margin: 0 0 16px; font: var(--mat-sys-headline-small); }
 
 .page-header {
@@ -124,13 +124,18 @@ table.mat-mdc-table { width: 100%; }
   /* Make the primary page action (e.g. "New Order") span the row on phones. */
   .page-header > button { width: 100%; }
 
-  /* Wide data tables scroll horizontally inside their card instead of squishing. */
+  /* Only the table itself scrolls horizontally, so the card, filters and
+     paginator on the left stay fixed and don't drift while the table is scrolled. */
   .table-card .mat-mdc-card-content,
   .mat-mdc-card-content:has(table.mat-mdc-table) {
+    overflow-x: clip;
+  }
+  table.mat-mdc-table {
+    display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
   }
-  table.mat-mdc-table { white-space: nowrap; }
 
   /* Stack filter / search controls full width so they're tappable. */
   .filters > *,

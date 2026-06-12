@@ -1,0 +1,1 @@
+- [Docker deploy workflow](docker-deploy-workflow.md) — how SalesApp runs in Docker + stale frontend-build gotcha
