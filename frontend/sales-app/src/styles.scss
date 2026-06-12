@@ -53,7 +53,17 @@ input[type="number"]::-webkit-inner-spin-button {
 /* padding-bottom lives on the scrollable content (not the scroll container)
    so the last element keeps clear space above the taskbar/window edge. */
 .page { width: 100%; padding-bottom: 40px; }
-.page h1 { margin: 0 0 16px; font: var(--mat-sys-headline-small); }
+/* Main page title — the top of the title hierarchy, slightly larger. */
+.page h1 { margin: 0 0 16px; font: var(--mat-sys-headline-medium); font-weight: 500; }
+
+/* Card section titles act as subtitles — slightly smaller than the main title,
+   lighter weight and reduced opacity so they sit below it in the hierarchy. */
+.mat-mdc-card-title {
+  font: var(--mat-sys-title-large);
+  font-size: 1.25rem;
+  font-weight: 500;
+  opacity: 0.7;
+}
 
 .page-header {
   display: flex;
