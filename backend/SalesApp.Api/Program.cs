@@ -8,6 +8,9 @@ using SalesApp.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// QuestPDF community license (free for small businesses / individuals).
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 // ---- Configuration bindings ----
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
@@ -21,6 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<OtpService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 
 // ---- Auth ----
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

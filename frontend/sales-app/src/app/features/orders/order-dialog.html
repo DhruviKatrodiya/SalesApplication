@@ -1,11 +1,37 @@
 <h2 mat-dialog-title>{{ isEdit ? 'Edit Order' : 'New Order' }}</h2>
 <mat-dialog-content>
   <div class="dialog-form">
-    <mat-radio-group class="source-group" [ngModel]="source()" (ngModelChange)="source.set($event)" aria-label="Stock handling">
+    <mat-radio-group class="source-group" [ngModel]="source()" (ngModelChange)="onSourceChange($event)" aria-label="Stock handling">
       <span class="source-label">Stock from:</span>
       <mat-radio-button [value]="OrderSource.Inventory">Inventory</mat-radio-button>
       <mat-radio-button [value]="OrderSource.Dispatch">Dispatch (Truck)</mat-radio-button>
     </mat-radio-group>
+
+    @if (source() === OrderSource.Dispatch) {
+      <div class="row">
+        <mat-form-field appearance="fill" style="flex:1; min-width:240px">
+          <mat-label>Truck</mat-label>
+          <mat-select [ngModel]="truckId()" (ngModelChange)="onTruckChange($event)" #truckCtrl="ngModel" required
+                      (opened)="onTruckSelectOpened()" (closed)="truckSearch.set('')">
+            <div class="select-search">
+              <mat-icon class="select-search-icon">search</mat-icon>
+              <input #truckSearchInput type="text" class="select-search-input" placeholder="Search truck…"
+                     [value]="truckSearch()"
+                     (input)="truckSearch.set($any($event.target).value)"
+                     (keydown)="$event.stopPropagation()"
+                     (click)="$event.stopPropagation()" />
+            </div>
+            @for (t of filteredTrucks(); track t.id) {
+              <mat-option [value]="t.id">{{ t.name }} ({{ t.totalUnits }} units)</mat-option>
+            }
+            @if (!filteredTrucks().length) {
+              <div class="select-empty">No trucks with stock found</div>
+            }
+          </mat-select>
+          @if (truckCtrl.touched && !truckId()) { <mat-error>Select a truck</mat-error> }
+        </mat-form-field>
+      </div>
+    }
 
     <div class="row">
       <mat-form-field appearance="fill" style="flex:1; min-width:240px">
@@ -35,6 +61,7 @@
       <mat-form-field appearance="fill" style="flex:1; min-width:220px">
         <mat-label>Add Item</mat-label>
         <mat-select [ngModel]="selectedItemId()" (ngModelChange)="selectedItemId.set($event)"
+                    [disabled]="source() === OrderSource.Dispatch && !truckId()"
                     (opened)="onItemSelectOpened()" (closed)="itemSearch.set('')">
           <div class="select-search">
             <mat-icon class="select-search-icon">search</mat-icon>
@@ -45,12 +72,19 @@
                    (click)="$event.stopPropagation()" />
           </div>
           @for (i of filteredItems(); track i.id) {
-            <mat-option [value]="i.id">{{ i.name }} ({{ i.unitPrice | currency:'INR' }})</mat-option>
+            <mat-option [value]="i.id" [disabled]="i.available <= 0">
+              {{ i.name }} ({{ i.unitPrice | currency:'INR' }}) · {{ i.available }} avail{{ i.available <= 0 ? ' — out of stock' : '' }}
+            </mat-option>
           }
           @if (!filteredItems().length) {
-            <div class="select-empty">No items found</div>
+            <div class="select-empty">
+              {{ source() === OrderSource.Dispatch && !truckId() ? 'Select a truck first' : 'No items found' }}
+            </div>
           }
         </mat-select>
+        @if (source() === OrderSource.Dispatch && !truckId()) {
+          <mat-hint class="avail-hint">Select a truck to load its stock</mat-hint>
+        }
       </mat-form-field>
       <mat-form-field appearance="fill" style="width:110px">
         <mat-label>Qty</mat-label>
@@ -72,13 +106,14 @@
         <th mat-header-cell *matHeaderCellDef>Qty</th>
         <td mat-cell *matCellDef="let l">
           <input type="number" min="1" [ngModel]="l.quantity" (ngModelChange)="updateQty(l.itemId, $event)" style="width:64px" />
+          @if (isLineOverStock(l)) {
+            <div class="over avail-hint">only {{ availableFor(l.itemId) }} available</div>
+          }
         </td>
       </ng-container>
       <ng-container matColumnDef="price">
         <th mat-header-cell *matHeaderCellDef>Unit Price</th>
-        <td mat-cell *matCellDef="let l">
-          <input type="number" min="0" [ngModel]="l.unitPrice" (ngModelChange)="updatePrice(l.itemId, $event)" style="width:90px" />
-        </td>
+        <td mat-cell *matCellDef="let l">{{ l.unitPrice | currency:'INR' }}</td>
       </ng-container>
       <ng-container matColumnDef="total">
         <th mat-header-cell *matHeaderCellDef>Total</th>

@@ -88,8 +88,43 @@ public class ItemsController : OwnedControllerBase
         };
         _db.Items.Add(i);
         await _db.SaveChangesAsync();
+        // Opening-stock batch so price history & valuation are complete from the start.
+        if (i.StockQuantity > 0)
+        {
+            _db.InventoryBatches.Add(new InventoryBatch
+            {
+                UserId = uid, ItemId = i.Id, Quantity = i.StockQuantity, PurchasePrice = i.UnitPrice
+            });
+            await _db.SaveChangesAsync();
+        }
         i = await WithIncludes().FirstAsync(x => x.Id == i.Id);
         return CreatedAtAction(nameof(Get), new { id = i.Id }, Map(i));
+    }
+
+    /// <summary>Purchase-price history (batches) for an item, with current valuation.</summary>
+    [HttpGet("{id:int}/price-history")]
+    public async Task<ActionResult<ItemPriceHistoryDto>> PriceHistory(int id)
+    {
+        var item = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (item is null) return NotFound();
+
+        var batches = await _db.InventoryBatches
+            .Where(b => b.ItemId == id)
+            .OrderByDescending(b => b.CreatedAt).ThenByDescending(b => b.Id)
+            .Select(b => new InventoryBatchDto(b.Id, b.Quantity, b.PurchasePrice, b.CreatedAt,
+                b.StockRequest != null ? b.StockRequest.RequestNumber : null))
+            .ToListAsync();
+
+        var receivedQty = batches.Sum(b => b.Quantity);
+        var receivedValue = batches.Sum(b => b.Quantity * b.PurchasePrice);
+        // Weighted-average cost across receipts; exact FIFO valuation arrives with consumption tracking (next phase).
+        var avgCost = receivedQty > 0 ? receivedValue / receivedQty : item.UnitPrice;
+        var oldest = batches.Count > 0 ? batches[^1].PurchasePrice : item.UnitPrice;
+        var latest = batches.Count > 0 ? batches[0].PurchasePrice : item.UnitPrice;
+        var stockValue = decimal.Round(item.StockQuantity * avgCost, 2);
+
+        return Ok(new ItemPriceHistoryDto(item.Id, item.Name, item.StockQuantity,
+            oldest, latest, decimal.Round(avgCost, 2), stockValue, batches));
     }
 
     [HttpPut("{id:int}")]

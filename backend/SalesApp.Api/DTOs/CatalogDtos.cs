@@ -23,6 +23,13 @@ public record ItemDto(
     int Id, int SubCategoryId, string SubCategoryName, string CategoryName,
     string Name, string? Sku, string? Unit, int StockQuantity, int DispatchStock, decimal UnitPrice);
 
+// Inventory batches (purchase-price history)
+public record InventoryBatchDto(int Id, int Quantity, decimal PurchasePrice, DateTime CreatedAt, string? SourceRequestNumber);
+public record ItemPriceHistoryDto(
+    int ItemId, string Name, int StockQuantity,
+    decimal OldestPrice, decimal LatestPrice, decimal AvgCost, decimal StockValue,
+    List<InventoryBatchDto> Batches);
+
 // Stock requests ("My Orders") — a salesperson's request for inventory / low-stock items
 public record StockRequestItemRequest(int ItemId, int Quantity, decimal? UnitPrice);
 public record StockRequestRequest(string? Notes, List<StockRequestItemRequest> Items);
@@ -35,6 +42,16 @@ public record StockRequestDto(
 // Stock-request payments
 public record StockRequestPaymentRequest(int StockRequestId, decimal Amount, DateTime? PaymentDate, string? Method, string? Note);
 public record StockRequestPaymentDto(int Id, int StockRequestId, decimal Amount, DateTime PaymentDate, string? Method, string? Note);
+// Salesperson-level advance summary across their stock requests.
+// TotalPaid = all money paid. RequestPayments = applied to requests. AdvanceBalance = unused. AdvanceUsed = applied from advance.
+public record StockRequestAdvanceDto(decimal TotalPaid, decimal RequestPayments, decimal AdvanceBalance, decimal AdvanceUsed);
+
+// Trucks (managed list, each with its own per-item stock)
+public record TruckRequest(string Name);
+public record TruckDto(int Id, string Name, DateTime CreatedAt, int ItemCount, int TotalUnits);
+// One line of a truck's stock — shaped like an order item picker option.
+public record TruckStockItemDto(
+    int ItemId, string Name, string? Sku, string? Unit, int Quantity, decimal UnitPrice);
 
 // Dispatch
 public record DispatchItemRequest(int ItemId, int Quantity);

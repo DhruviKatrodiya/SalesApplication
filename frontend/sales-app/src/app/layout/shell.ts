@@ -41,6 +41,7 @@ export class Shell {
     { label: 'Categories', icon: 'category', path: '/categories' },
     { label: 'Inventory', icon: 'inventory_2', path: '/inventory' },
     { label: 'Dispatch (Truck)', icon: 'local_shipping', path: '/dispatch' },
+    { label: 'Trucks', icon: 'fire_truck', path: '/trucks' },
     { label: 'Customers', icon: 'people', path: '/customers' },
     { label: 'Routes', icon: 'route', path: '/routes' },
     { label: 'Customer Orders', icon: 'receipt_long', path: '/orders' },

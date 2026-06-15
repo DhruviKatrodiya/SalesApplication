@@ -14,6 +14,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { Item, SubCategory } from '../../core/models';
 import { ItemDialog } from './item-dialog';
+import { PriceHistoryDialog } from './price-history-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
@@ -100,6 +101,10 @@ export class Inventory implements OnInit {
       .afterClosed().subscribe(res => {
         if (res) this.api.updateItem(item.id, res).subscribe(() => { this.snack.open('Item updated', 'Close', { duration: 2000 }); this.load(); });
       });
+  }
+
+  priceHistory(item: Item) {
+    this.dialog.open(PriceHistoryDialog, { data: { id: item.id, name: item.name }, width: '640px', maxWidth: '95vw' });
   }
 
   remove(item: Item) {

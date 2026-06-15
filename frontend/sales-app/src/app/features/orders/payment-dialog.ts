@@ -24,7 +24,16 @@ import { Order, Payment, PaymentStatusLabels } from '../../core/models';
     .full { width: 100%; }
     .summary { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
     .summary div span { font-weight:600; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .advance-banner {
+      display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+      background:#cfe2ff; color:#084298; border-radius:8px;
+      padding:8px 12px; margin-bottom:12px; font-weight:500;
+    }
+    .advance-banner span { font-weight:700; }
+    .advance-banner mat-icon { color:#084298; }
+    .advance-banner .apply-btn { margin-left:auto; }
+    .advance-banner .apply-btn mat-icon { color:inherit; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
     .actions-row { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin: 8px 0 24px; }
     .actions-row button { min-width: 150px; }
   `
@@ -36,6 +45,7 @@ export class PaymentDialog implements OnInit {
   order = signal<Order>(inject<Order>(MAT_DIALOG_DATA));
 
   payments = signal<Payment[]>([]);
+  advance = signal<number>(0);   // customer's available advance balance (shown, not auto-applied)
   amount = signal<number | null>(null);
   method = signal<string>('Cash');
   note = signal<string>('');
@@ -44,10 +54,14 @@ export class PaymentDialog implements OnInit {
   columns = ['srNo', 'date', 'amount', 'method', 'note', 'actions'];
   payLabel = PaymentStatusLabels;
 
-  ngOnInit() { this.loadPayments(); }
+  ngOnInit() { this.loadPayments(); this.loadAdvance(); }
 
   loadPayments() {
     this.api.getPaymentsByOrder(this.order().id).subscribe(p => this.payments.set(p));
+  }
+
+  loadAdvance() {
+    this.api.getCustomerAdvance(this.order().customerId).subscribe(r => this.advance.set(r.advanceBalance));
   }
 
   addPayment() {
@@ -61,7 +75,18 @@ export class PaymentDialog implements OnInit {
         this.note.set('');
         this.snack.open('Payment recorded', 'Close', { duration: 2000 });
         this.loadPayments();
+        this.loadAdvance();
       });
+  }
+
+  applyAdvance() {
+    this.api.applyAdvance(this.order().id).subscribe(updated => {
+      this.order.set(updated);
+      this.changed = true;
+      this.snack.open('Advance applied to this order', 'Close', { duration: 2000 });
+      this.loadPayments();
+      this.loadAdvance();
+    });
   }
 
   settle() {
@@ -70,6 +95,7 @@ export class PaymentDialog implements OnInit {
       this.changed = true;
       this.snack.open('Order fully settled', 'Close', { duration: 2000 });
       this.loadPayments();
+      this.loadAdvance();
     });
   }
 
@@ -79,6 +105,7 @@ export class PaymentDialog implements OnInit {
       this.changed = true;
       this.snack.open('Payment removed', 'Close', { duration: 2000 });
       this.loadPayments();
+      this.loadAdvance();
     });
   }
 

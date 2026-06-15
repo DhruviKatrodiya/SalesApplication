@@ -64,6 +64,65 @@ public class PaymentsController : ControllerBase
         return Ok(Mappers.ToDto(order));
     }
 
+    /// <summary>
+    /// Applies the customer's available advance balance to an order: moves the overpayment out of the
+    /// source order(s) and records it as a payment on this order. Money is conserved (total paid is unchanged).
+    /// </summary>
+    [HttpPost("apply-advance/{orderId:int}")]
+    public async Task<ActionResult<OrderDto>> ApplyAdvance(int orderId, ApplyAdvanceRequest? req)
+    {
+        var target0 = await _db.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
+        if (target0 is null) return BadRequest(new MessageResponse("Order not found."));
+        if (target0.SalesmanId != CurrentUserId) return NotOwner();
+
+        // All of this customer's orders (the advance lives as overpayment on some of them).
+        var customerOrders = await _db.Orders
+            .Include(o => o.Customer)
+            .Include(o => o.Items).ThenInclude(i => i.Item)
+            .Include(o => o.Payments)
+            .Where(o => o.CustomerId == target0.CustomerId)
+            .ToListAsync();
+        var target = customerOrders.First(o => o.Id == orderId);
+
+        var available = OrderMath.AdvanceBalance(customerOrders);
+        var targetRemaining = Math.Max(0, target.TotalAmount - target.Payments.Sum(p => p.Amount));
+        var toApply = Math.Min(available, targetRemaining);
+        if (req?.Amount is decimal a && a > 0) toApply = Math.Min(toApply, a);
+        if (toApply <= 0) return BadRequest(new MessageResponse("No advance balance available to apply."));
+
+        // Pull the amount out of the source orders that hold the overpayment.
+        var left = toApply;
+        foreach (var src in customerOrders.Where(o => o.Id != target.Id && OrderMath.OverpaidOn(o) > 0)
+                                          .OrderBy(o => o.OrderDate))
+        {
+            if (left <= 0) break;
+            var take = Math.Min(left, OrderMath.OverpaidOn(src));
+            src.Payments.Add(new Payment
+            {
+                OrderId = src.Id,
+                Amount = -take,
+                PaymentDate = DateTime.UtcNow,
+                Method = PaymentMethods.AdvanceTransfer,
+                Note = $"Advance applied to {target.OrderNumber}"
+            });
+            OrderMath.Recalculate(src);
+            left -= take;
+        }
+
+        target.Payments.Add(new Payment
+        {
+            OrderId = target.Id,
+            Amount = toApply,
+            PaymentDate = DateTime.UtcNow,
+            Method = PaymentMethods.Advance,
+            Note = "Applied from advance balance"
+        });
+        OrderMath.Recalculate(target);
+
+        await _db.SaveChangesAsync();
+        return Ok(Mappers.ToDto(target));
+    }
+
     /// <summary>Mark an order fully settled (records a payment for the remaining balance).</summary>
     [HttpPost("settle/{orderId:int}")]
     public async Task<ActionResult<OrderDto>> Settle(int orderId)
@@ -99,6 +158,8 @@ public class PaymentsController : ControllerBase
         var payment = await _db.Payments.FindAsync(id);
         if (payment is null) return NotFound();
         if (!await _db.Orders.AnyAsync(o => o.Id == payment.OrderId && o.SalesmanId == CurrentUserId)) return NotOwner();
+        if (payment.Method is PaymentMethods.Advance or PaymentMethods.AdvanceTransfer)
+            return BadRequest(new MessageResponse("Advance entries can't be deleted directly."));
 
         var orderId = payment.OrderId;
         _db.Payments.Remove(payment);

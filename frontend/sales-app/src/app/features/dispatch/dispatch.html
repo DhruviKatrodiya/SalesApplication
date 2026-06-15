@@ -7,9 +7,25 @@
     <mat-card-header><mat-card-title>New Dispatch</mat-card-title></mat-card-header>
     <mat-card-content>
       <div class="row">
-        <mat-form-field appearance="fill">
+        <mat-form-field appearance="fill" style="min-width:200px">
           <mat-label>Truck</mat-label>
-          <input matInput [ngModel]="truckLabel()" (ngModelChange)="setTruckLabel($event)" />
+          <mat-select [ngModel]="truckLabel()" (ngModelChange)="selectTruck($event)"
+                      (opened)="onTruckSelectOpened()" (closed)="truckPickSearch.set('')">
+            <div class="select-search">
+              <mat-icon class="select-search-icon">search</mat-icon>
+              <input #truckPickSearchInput type="text" class="select-search-input" placeholder="Search truck…"
+                     [value]="truckPickSearch()"
+                     (input)="truckPickSearch.set($any($event.target).value)"
+                     (keydown)="$event.stopPropagation()"
+                     (click)="$event.stopPropagation()" />
+            </div>
+            @for (t of filteredTruckOptions(); track t.id) {
+              <mat-option [value]="t.name">{{ t.name }} ({{ t.totalUnits }} units)</mat-option>
+            }
+            @if (!filteredTruckOptions().length) {
+              <div class="select-empty">No trucks. Create one on the Trucks page.</div>
+            }
+          </mat-select>
         </mat-form-field>
         <mat-form-field appearance="fill" style="flex:1; min-width:220px">
           <mat-label>Item</mat-label>
@@ -24,10 +40,12 @@
                      (click)="$event.stopPropagation()" />
             </div>
             @for (i of filteredDispatchItems(); track i.id) {
-              <mat-option [value]="i.id">{{ i.name }} (stock: {{ i.stockQuantity }})</mat-option>
+              <mat-option [value]="i.id" [disabled]="i.stockQuantity <= 0">
+                {{ i.name }} (stock: {{ i.stockQuantity }}){{ i.stockQuantity <= 0 ? ' — out of stock' : '' }}
+              </mat-option>
             }
             @if (!filteredDispatchItems().length) {
-              <div class="select-empty">{{ itemSearch() ? 'No items found' : 'No items in stock.' }}</div>
+              <div class="select-empty">{{ itemSearch() ? 'No items found' : 'No items yet.' }}</div>
             }
           </mat-select>
         </mat-form-field>
@@ -93,12 +111,10 @@
       <div class="search-grid">
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Truck</mat-label>
-          <input matInput [ngModel]="truckSearch()" (ngModelChange)="setTruckSearch($event)" placeholder="truck label" />
-          @if (truckSearch()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setTruckSearch('')"><mat-icon>close</mat-icon></button>
-          } @else {
-            <mat-icon matSuffix>search</mat-icon>
-          }
+          <mat-select [ngModel]="truckSearch()" (ngModelChange)="setTruckSearch($event)">
+            <mat-option [value]="''">All trucks</mat-option>
+            @for (label of historyTruckLabels(); track label) { <mat-option [value]="label">{{ label }}</mat-option> }
+          </mat-select>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
@@ -119,7 +135,7 @@
         </ng-container>
         <ng-container matColumnDef="date">
           <th mat-header-cell *matHeaderCellDef>Date</th>
-          <td mat-cell *matCellDef="let d">{{ d.dispatchDate | date:'medium' }}</td>
+          <td mat-cell *matCellDef="let d">{{ d.dispatchDate | date:'dd-MM-yyyy' }}</td>
         </ng-container>
         <ng-container matColumnDef="truck">
           <th mat-header-cell *matHeaderCellDef>Truck</th>

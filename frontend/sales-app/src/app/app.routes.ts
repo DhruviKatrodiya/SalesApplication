@@ -18,6 +18,7 @@ export const routes: Routes = [
       { path: 'categories', loadComponent: () => import('./features/categories/categories').then(m => m.Categories) },
       { path: 'inventory', loadComponent: () => import('./features/inventory/inventory').then(m => m.Inventory) },
       { path: 'dispatch', loadComponent: () => import('./features/dispatch/dispatch').then(m => m.Dispatch) },
+      { path: 'trucks', loadComponent: () => import('./features/trucks/trucks').then(m => m.Trucks) },
       { path: 'customers', loadComponent: () => import('./features/customers/customers').then(m => m.Customers) },
       { path: 'routes', loadComponent: () => import('./features/routes/routes').then(m => m.RoutesPage) },
       { path: 'orders', loadComponent: () => import('./features/orders/orders').then(m => m.Orders), data: { title: 'Customer Orders' } },

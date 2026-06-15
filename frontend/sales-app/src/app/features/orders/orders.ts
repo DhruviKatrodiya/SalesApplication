@@ -51,13 +51,14 @@ export class Orders implements OnInit {
   items = signal<Item[]>([]);
 
   // ---- Filters ----
+  orderNumberFilter = signal<string>('');
   customerFilter = signal<string>('');
   orderDateFilter = signal<Date | null>(null);
   deliveryStatusFilter = signal<OrderStatus | null>(null);
   paidStatusFilter = signal<PaymentStatus | null>(null);
 
   hasFilters = computed(() =>
-    !!this.customerFilter() || !!this.orderDateFilter() ||
+    !!this.orderNumberFilter() || !!this.customerFilter() || !!this.orderDateFilter() ||
     this.deliveryStatusFilter() != null || this.paidStatusFilter() != null);
 
   columns = ['orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'actions'];
@@ -72,11 +73,13 @@ export class Orders implements OnInit {
 
   // Filter setters (reset to the first page and reload from the server on any change)
   private reload() { this.pager.reset(); this.load(); }
+  setOrderNumberFilter(v: string) { this.orderNumberFilter.set(v); this.reload(); }
   setCustomerFilter(v: string) { this.customerFilter.set(v); this.reload(); }
   setOrderDateFilter(v: Date | null) { this.orderDateFilter.set(v); this.reload(); }
   setDeliveryStatusFilter(v: OrderStatus | null) { this.deliveryStatusFilter.set(v); this.reload(); }
   setPaidStatusFilter(v: PaymentStatus | null) { this.paidStatusFilter.set(v); this.reload(); }
   clearFilters() {
+    this.orderNumberFilter.set('');
     this.customerFilter.set('');
     this.orderDateFilter.set(null);
     this.deliveryStatusFilter.set(null);
@@ -95,6 +98,7 @@ export class Orders implements OnInit {
   load() {
     const d = this.orderDateFilter();
     this.api.getOrders({
+      orderNumber: this.orderNumberFilter() || undefined,
       customer: this.customerFilter() || undefined,
       orderDate: d ? this.toIsoDate(d) : undefined,
       status: this.deliveryStatusFilter() ?? undefined,
@@ -177,6 +181,20 @@ export class Orders implements OnInit {
       .afterClosed().subscribe(ok => {
         if (ok) this.api.deleteOrder(o.id).subscribe(() => { this.snack.open('Order deleted', 'Close', { duration: 2000 }); this.load(); });
       });
+  }
+
+  downloadInvoice(o: Order) {
+    this.api.downloadInvoice(o.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Invoice-${o.orderNumber}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.snack.open('Could not generate the invoice PDF.', 'Close', { duration: 4000 })
+    });
   }
 
   private replace(updated: Order) {

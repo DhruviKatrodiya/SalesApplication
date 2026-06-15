@@ -14,7 +14,7 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
-import { Item, Dispatch as DispatchModel, DispatchDraftItem } from '../../core/models';
+import { Item, Dispatch as DispatchModel, DispatchDraftItem, Truck } from '../../core/models';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 interface CartLine { itemId: number; itemName: string; quantity: number; available: number; truckLabel: string; }
@@ -59,6 +59,7 @@ interface CartLine { itemId: number; itemName: string; quantity: number; availab
     }
     .select-search-input:focus { border-color: var(--mat-sys-primary); }
     .select-empty { padding: 12px 16px; color: var(--mat-sys-on-surface-variant); }
+    .muted { color: var(--mat-sys-on-surface-variant); font-weight: 400; font-size: 0.9em; }
   `
 })
 export class Dispatch implements OnInit {
@@ -68,9 +69,20 @@ export class Dispatch implements OnInit {
   items = signal<Item[]>([]);
   history = signal<DispatchModel[]>([]);
   cart = signal<CartLine[]>([]);
+  trucks = signal<Truck[]>([]);                 // managed trucks (to load onto)
+  historyTruckLabels = signal<string[]>([]);    // distinct truck labels in history (to filter by)
 
-  /** Only in-stock items can be dispatched, so out-of-stock items are hidden from the picker. */
-  readonly dispatchableItems = computed(() => this.items().filter(i => i.stockQuantity > 0));
+  // Searchable truck dropdown
+  private truckPickSearchInput = viewChild<ElementRef<HTMLInputElement>>('truckPickSearchInput');
+  readonly truckPickSearch = signal('');
+  readonly filteredTruckOptions = computed(() => {
+    const q = this.truckPickSearch().toLowerCase().trim();
+    return q ? this.trucks().filter(t => t.name.toLowerCase().includes(q)) : this.trucks();
+  });
+  onTruckSelectOpened() { setTimeout(() => this.truckPickSearchInput()?.nativeElement.focus()); }
+
+  /** All items are listed; out-of-stock ones are shown but disabled (can't be dispatched). */
+  readonly dispatchableItems = computed(() => this.items());
 
   // In-dropdown item search
   private itemSearchInput = viewChild<ElementRef<HTMLInputElement>>('itemSearchInput');
@@ -104,18 +116,29 @@ export class Dispatch implements OnInit {
 
   ngOnInit() {
     this.loadHistory();
+    this.loadTrucks();
     // Load items and the saved draft together, then rebuild the cart so a
     // previously selected (unsaved) dispatch reappears after navigating away.
     forkJoin({ items: this.api.getAllItems(), draft: this.api.getDispatchDraft() })
       .subscribe(({ items, draft }) => {
         this.items.set(items);
-        if (draft.truckLabel) this.truckLabel.set(draft.truckLabel);
+        if (draft.truckLabel) { this.truckLabel.set(draft.truckLabel); this.truckSearch.set(draft.truckLabel); }
         this.notes.set(draft.notes ?? '');
         this.cart.set(this.buildCart(draft.items, items));
       });
   }
 
   loadItems() { this.api.getAllItems().subscribe(list => this.items.set(list)); }
+  loadTrucks() {
+    this.api.getTrucks().subscribe(list => this.trucks.set(list));
+    this.api.getDispatchTruckLabels().subscribe(labels => this.historyTruckLabels.set(labels));
+  }
+
+  /** Pick the truck the new dispatch loads onto. */
+  selectTruck(name: string) {
+    this.truckLabel.set(name);
+    this.persistDraft();
+  }
 
   loadHistory() {
     const d = this.dateSearch();
@@ -180,9 +203,9 @@ export class Dispatch implements OnInit {
     const q = Number(this.qty());
     if (!id || q <= 0) return;
     const item = this.items().find(i => i.id === id);
-    if (!item) return;
+    if (!item || item.stockQuantity <= 0) return;   // out-of-stock items can't be dispatched
     const truck = this.truckLabel().trim();
-    if (!truck) { this.snack.open('Enter a truck name first.', 'Close', { duration: 2500 }); return; }
+    if (!truck) { this.snack.open('Select a truck first.', 'Close', { duration: 2500 }); return; }
 
     // Merge only when the same item is added to the same truck.
     const existing = this.cart().find(c => c.itemId === id && c.truckLabel === truck);
@@ -246,6 +269,7 @@ export class Dispatch implements OnInit {
         this.notes.set('');
         this.api.clearDispatchDraft().subscribe();
         this.loadItems();
+        this.loadTrucks();   // truck unit totals changed
         this.historyPager.reset();
         this.loadHistory();
       },

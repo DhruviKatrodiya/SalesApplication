@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, signal, computed, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, signal, computed, viewChild, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CurrencyPipe } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -10,10 +10,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatRadioModule } from '@angular/material/radio';
-import { Customer, Item, Order, OrderStatus, OrderStatusLabels, OrderSource } from '../../core/models';
+import { ApiService } from '../../core/api.service';
+import { Customer, Item, Order, OrderStatus, OrderStatusLabels, OrderSource, Truck } from '../../core/models';
 
 interface DialogData { customers: Customer[]; items: Item[]; order: Order | null; }
 interface Line { itemId: number; itemName: string; quantity: number; unitPrice: number; }
+interface PickerOption { id: number; name: string; unitPrice: number; available: number; }
 
 @Component({
   selector: 'app-order-dialog',
@@ -46,15 +48,17 @@ interface Line { itemId: number; itemName: string; quantity: number; unitPrice: 
     .source-label { color: var(--mat-sys-on-surface-variant); font-weight:600; }
     .total-row { display:flex; justify-content:flex-end; font-weight:600; margin-top:8px; font-size:1.1em; }
     .req-msg { color: var(--mat-sys-error); font-size: 0.85em; padding: 8px 4px; }
+    .over { color: var(--mat-sys-error); }
+    .avail-hint { color: var(--mat-sys-on-surface-variant); font-size: 0.85em; }
     table { width: 100%; }
   `
 })
-export class OrderDialog {
+export class OrderDialog implements OnInit {
   private ref = inject(MatDialogRef<OrderDialog>);
+  private api = inject(ApiService);
   data = inject<DialogData>(MAT_DIALOG_DATA);
 
   customerId = signal<number | null>(this.data.order?.customerId ?? null);
-  // Edit: keep the order's existing delivery date (may be unset). New order: default to today (still editable).
   deliveryDate = signal<Date | null>(
     this.data.order
       ? (this.data.order.deliveryDate ? new Date(this.data.order.deliveryDate) : null)
@@ -64,53 +68,123 @@ export class OrderDialog {
   status = signal<OrderStatus>(this.data.order?.status ?? OrderStatus.Pending);
   statusOptions = Object.entries(OrderStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
 
-  // Stock handling: Inventory consumes godown stock, Dispatch consumes truck stock.
+  // Stock handling: Inventory consumes godown stock; Dispatch consumes a specific truck's stock.
   readonly OrderSource = OrderSource;
   source = signal<OrderSource>(this.data.order?.source ?? OrderSource.Inventory);
+
+  // ---- Trucks (only relevant when source = Dispatch) ----
+  trucks = signal<Truck[]>([]);
+  truckId = signal<number | null>(this.data.order?.truckId ?? null);
+  truckStock = signal<PickerOption[]>([]);   // the selected truck's items + available qty
+  private truckSearchInput = viewChild<ElementRef<HTMLInputElement>>('truckSearchInput');
+  readonly truckSearch = signal('');
+  readonly filteredTrucks = computed(() => {
+    const q = this.truckSearch().toLowerCase().trim();
+    return q ? this.trucks().filter(t => t.name.toLowerCase().includes(q)) : this.trucks();
+  });
+  onTruckSelectOpened() { setTimeout(() => this.truckSearchInput()?.nativeElement.focus()); }
 
   selectedItemId = signal<number | null>(null);
   qty = signal<number>(1);
 
-  // In-dropdown item search
+  // The item picker switches between the full catalog (Inventory) and the truck's stock (Dispatch).
+  readonly pickerOptions = computed<PickerOption[]>(() =>
+    this.source() === OrderSource.Dispatch
+      ? this.truckStock()
+      : this.data.items.map(i => ({ id: i.id, name: i.name, unitPrice: i.unitPrice, available: i.stockQuantity }))
+  );
+
   private itemSearchInput = viewChild<ElementRef<HTMLInputElement>>('itemSearchInput');
   readonly itemSearch = signal('');
   readonly filteredItems = computed(() => {
     const q = this.itemSearch().toLowerCase().trim();
-    return q ? this.data.items.filter(i => i.name.toLowerCase().includes(q)) : this.data.items;
+    const list = this.pickerOptions();
+    return q ? list.filter(i => i.name.toLowerCase().includes(q)) : list;
   });
-  onItemSelectOpened() {
-    setTimeout(() => this.itemSearchInput()?.nativeElement.focus());
-  }
+  onItemSelectOpened() { setTimeout(() => this.itemSearchInput()?.nativeElement.focus()); }
 
   lines = signal<Line[]>(
     (this.data.order?.items ?? []).map(i => ({ itemId: i.itemId, itemName: i.itemName, quantity: i.quantity, unitPrice: i.unitPrice }))
   );
 
+  // For edit mode: the order's own quantities are still "available" to it (server restores them on update).
+  private readonly originalQty = new Map<number, number>(
+    (this.data.order?.items ?? []).map(i => [i.itemId, i.quantity] as [number, number])
+  );
+
   columns = ['srNo', 'item', 'qty', 'price', 'total', 'actions'];
-  // Keep rows stable across edits so number inputs don't lose focus mid-typing.
   trackByItemId = (_: number, l: Line) => l.itemId;
   total = computed(() => this.lines().reduce((s, l) => s + l.quantity * l.unitPrice, 0));
   isEdit = !!this.data.order;
+
+  ngOnInit() {
+    this.loadTrucks();
+    // Editing an existing dispatch order: load its truck's stock so availability is known.
+    if (this.source() === OrderSource.Dispatch && this.truckId()) this.loadTruckStock(this.truckId()!);
+  }
+
+  private loadTrucks() {
+    this.api.getTrucks({ withStock: true }).subscribe(list => this.trucks.set(list));
+  }
+
+  private loadTruckStock(truckId: number) {
+    this.api.getTruckStock(truckId).subscribe(stock =>
+      this.truckStock.set(stock.map(s => ({ id: s.itemId, name: s.name, unitPrice: s.unitPrice, available: s.quantity }))));
+  }
+
+  onSourceChange(src: OrderSource) {
+    if (src === this.source()) return;
+    this.source.set(src);
+    // Switching the stock source invalidates the current lines (different bucket/prices).
+    this.lines.set([]);
+    this.selectedItemId.set(null);
+    this.itemSearch.set('');
+    if (src === OrderSource.Dispatch) { this.loadTrucks(); }
+    else { this.truckId.set(null); this.truckStock.set([]); }
+  }
+
+  onTruckChange(id: number | null) {
+    this.truckId.set(id);
+    this.truckSearch.set('');
+    this.lines.set([]);            // a new truck means new stock — start fresh
+    this.selectedItemId.set(null);
+    this.truckStock.set([]);
+    if (id) this.loadTruckStock(id);
+  }
+
+  /** Available quantity for an item in the current bucket (adds back this order's own qty when editing). */
+  availableFor(itemId: number): number {
+    const opt = this.pickerOptions().find(o => o.id === itemId);
+    let avail = opt ? opt.available : 0;
+    if (this.isEdit) {
+      const orig = this.originalQty.get(itemId);
+      const sameBucket = this.source() === OrderSource.Dispatch
+        ? (this.data.order!.source === OrderSource.Dispatch && (this.data.order!.truckId ?? null) === this.truckId())
+        : (this.data.order!.source !== OrderSource.Dispatch);
+      if (orig && sameBucket) avail += orig;
+    }
+    return avail;
+  }
+
+  isLineOverStock(l: Line): boolean { return l.quantity > this.availableFor(l.itemId); }
+  hasStockIssue(): boolean { return this.lines().some(l => this.isLineOverStock(l)); }
 
   addLine() {
     const id = this.selectedItemId();
     const q = Number(this.qty());
     if (!id || q <= 0) return;
-    const item = this.data.items.find(i => i.id === id);
-    if (!item) return;
+    const opt = this.pickerOptions().find(i => i.id === id);
+    if (!opt || opt.available <= 0) return;   // out-of-stock items can't be added
     const existing = this.lines().find(l => l.itemId === id);
     if (existing) {
       this.lines.update(ls => ls.map(l => l.itemId === id ? { ...l, quantity: l.quantity + q } : l));
     } else {
-      this.lines.update(ls => [...ls, { itemId: id, itemName: item.name, quantity: q, unitPrice: item.unitPrice }]);
+      this.lines.update(ls => [...ls, { itemId: id, itemName: opt.name, quantity: q, unitPrice: opt.unitPrice }]);
     }
     this.selectedItemId.set(null);
     this.qty.set(1);
   }
 
-  updatePrice(itemId: number, price: number) {
-    this.lines.update(ls => ls.map(l => l.itemId === itemId ? { ...l, unitPrice: Number(price) } : l));
-  }
   updateQty(itemId: number, q: number) {
     this.lines.update(ls => ls.map(l => l.itemId === itemId ? { ...l, quantity: Number(q) } : l));
   }
@@ -119,7 +193,10 @@ export class OrderDialog {
   }
 
   canSave(): boolean {
-    return !!this.customerId() && this.lines().length > 0;
+    if (!this.customerId() || this.lines().length === 0) return false;
+    if (this.source() === OrderSource.Dispatch && !this.truckId()) return false;
+    if (this.hasStockIssue()) return false;
+    return true;
   }
 
   save() {
@@ -129,17 +206,15 @@ export class OrderDialog {
       customerId: this.customerId(),
       deliveryDate: dd ? toLocalIso(dd) : null,
       notes: this.notes(),
-      // Status only applies when editing; new orders always start Pending (server-enforced).
       status: this.isEdit ? this.status() : undefined,
-      // Stock source controls which bucket (inventory vs truck) the order draws from.
       source: this.source(),
+      truckId: this.source() === OrderSource.Dispatch ? this.truckId() : null,
       items: this.lines().map(l => ({ itemId: l.itemId, quantity: l.quantity, unitPrice: l.unitPrice }))
     });
   }
 }
 
 function toLocalIso(d: Date): string {
-  // keep the chosen calendar date without timezone shifting
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

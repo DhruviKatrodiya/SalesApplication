@@ -10,7 +10,8 @@ public record CustomerDto(int Id, string Name, string? Phone, string? Email, str
 public record OrderItemRequest(int ItemId, int Quantity, decimal? UnitPrice);
 public record OrderRequest(
     int CustomerId, DateTime? OrderDate, DateTime? DeliveryDate, string? Notes,
-    List<OrderItemRequest> Items, OrderStatus? Status = null, OrderSource? Source = null);
+    List<OrderItemRequest> Items, OrderStatus? Status = null, OrderSource? Source = null,
+    int? TruckId = null);
 
 public record OrderItemDto(
     int Id, int ItemId, string ItemName, int Quantity, decimal UnitPrice, decimal LineTotal,
@@ -21,7 +22,8 @@ public record OrderDto(
     DateTime OrderDate, DateTime? DeliveryDate,
     OrderStatus Status, PaymentStatus PaymentStatus, OrderSource Source,
     decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount,
-    string? Notes, List<OrderItemDto> Items);
+    string? Notes, List<OrderItemDto> Items,
+    int? TruckId = null, string? TruckName = null);
 
 public record UpdateOrderStatusRequest(OrderStatus Status);
 public record UpdateDeliveryDateRequest(DateTime? DeliveryDate);
@@ -30,11 +32,16 @@ public record UpdateReceivedStatusRequest(ReceivedStatus ReceivedStatus);
 // Payments
 public record PaymentRequest(int OrderId, decimal Amount, DateTime? PaymentDate, string? Method, string? Note);
 public record PaymentDto(int Id, int OrderId, decimal Amount, DateTime PaymentDate, string? Method, string? Note);
+public record CustomerAdvanceDto(decimal AdvanceBalance);
+public record ApplyAdvanceRequest(decimal? Amount);
 
 // Customer search (the "ABC" lookup)
+// TotalPaid = all money received. OrderPayments = the part applied to orders.
+// AdvanceBalance = the extra still unused (remaining). AdvanceUsed = advance already applied to orders.
 public record CustomerSearchResult(
     CustomerDto Customer,
     decimal TotalOrdered, decimal TotalPaid, decimal TotalRemaining,
+    decimal OrderPayments, decimal AdvanceBalance, decimal AdvanceUsed,
     string OverallPaymentStatus,
     int PendingOrders, int DeliveredOrders,
     List<OrderDto> Orders);

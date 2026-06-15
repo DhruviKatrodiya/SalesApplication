@@ -36,7 +36,9 @@ interface Line { itemId: number; itemName: string; quantity: number; currentStoc
                        (keydown)="$event.stopPropagation()" (click)="$event.stopPropagation()" />
               </div>
               @for (i of filteredItems(); track i.id) {
-                <mat-option [value]="i.id">{{ i.name }} (stock: {{ i.stockQuantity }})</mat-option>
+                <mat-option [value]="i.id" [disabled]="i.stockQuantity <= 0">
+                  {{ i.name }} (stock: {{ i.stockQuantity }}){{ i.stockQuantity <= 0 ? ' — out of stock' : '' }}
+                </mat-option>
               }
               @if (!filteredItems().length) { <div class="select-empty">No items found</div> }
             </mat-select>
@@ -127,7 +129,7 @@ export class RequestDialog {
     const q = Number(this.qty());
     if (!id || q <= 0) return;
     const item = this.data.items.find(i => i.id === id);
-    if (!item) return;
+    if (!item || item.stockQuantity <= 0) return;   // out-of-stock items can't be requested
     const existing = this.lines().find(l => l.itemId === id);
     if (existing) {
       this.lines.update(ls => ls.map(l => l.itemId === id ? { ...l, quantity: l.quantity + q } : l));
@@ -149,10 +151,12 @@ export class RequestDialog {
   }
 
   save() {
-    if (!this.lines().length) return;
+    // Exclude any out-of-stock lines from the saved request.
+    const items = this.lines().filter(l => l.currentStock > 0);
+    if (!items.length) return;
     this.ref.close({
       notes: this.notes(),
-      items: this.lines().map(l => ({ itemId: l.itemId, quantity: l.quantity, unitPrice: l.unitPrice }))
+      items: items.map(l => ({ itemId: l.itemId, quantity: l.quantity, unitPrice: l.unitPrice }))
     });
   }
 }

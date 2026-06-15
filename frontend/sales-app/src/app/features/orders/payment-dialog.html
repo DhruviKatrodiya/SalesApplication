@@ -14,8 +14,20 @@
       </div>
     </div>
 
+    @if (advance() > 0) {
+      <div class="advance-banner">
+        <mat-icon>account_balance_wallet</mat-icon>
+        Advance balance available: <span>{{ advance() | currency:'INR' }}</span>
+        @if (order().remainingAmount > 0) {
+          <button mat-flat-button color="primary" class="apply-btn" (click)="applyAdvance()">
+            <mat-icon>redeem</mat-icon> Apply to this order
+          </button>
+        }
+      </div>
+    }
+
     <div class="row">
-      <mat-form-field appearance="fill" style="width:140px">
+      <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:170px">
         <mat-label>Amount</mat-label>
         <input matInput type="number" min="1" [ngModel]="amount()" (ngModelChange)="amount.set($event)" #amtCtrl="ngModel" required />
         @if (amtCtrl.touched && amtCtrl.hasError('required')) { <mat-error>Amount is required</mat-error> }
@@ -49,7 +61,7 @@
       </ng-container>
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef>Date</th>
-        <td mat-cell *matCellDef="let p">{{ p.paymentDate | date:'mediumDate' }}</td>
+        <td mat-cell *matCellDef="let p">{{ p.paymentDate | date:'dd-MM-yyyy' }}</td>
       </ng-container>
       <ng-container matColumnDef="amount">
         <th mat-header-cell *matHeaderCellDef>Amount</th>
@@ -65,7 +77,11 @@
       </ng-container>
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
-        <td mat-cell *matCellDef="let p"><button mat-icon-button (click)="deletePayment(p)"><mat-icon>delete</mat-icon></button></td>
+        <td mat-cell *matCellDef="let p">
+          @if (p.method !== 'Advance' && p.method !== 'AdvanceTransfer') {
+            <button mat-icon-button (click)="deletePayment(p)"><mat-icon>delete</mat-icon></button>
+          }
+        </td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="columns"></tr>
       <tr mat-row *matRowDef="let row; columns: columns"></tr>

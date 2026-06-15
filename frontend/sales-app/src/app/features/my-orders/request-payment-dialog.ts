@@ -34,7 +34,7 @@ import { StockRequest, StockRequestPayment, PaymentStatusLabels } from '../../co
         </div>
 
         <div class="row">
-          <mat-form-field appearance="fill" style="width:140px">
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:170px">
             <mat-label>Amount</mat-label>
             <input matInput type="number" min="1" [ngModel]="amount()" (ngModelChange)="amount.set($event)" #amtCtrl="ngModel" required />
             @if (amtCtrl.touched && amtCtrl.hasError('required')) { <mat-error>Amount is required</mat-error> }
@@ -54,6 +54,18 @@ import { StockRequest, StockRequestPayment, PaymentStatusLabels } from '../../co
           </mat-form-field>
         </div>
 
+        @if (advance() > 0) {
+          <div class="advance-banner">
+            <mat-icon>account_balance_wallet</mat-icon>
+            Advance balance available: <span>{{ advance() | currency:'INR' }}</span>
+            @if (request().remainingAmount > 0) {
+              <button mat-flat-button color="primary" class="apply-btn" (click)="applyAdvance()">
+                <mat-icon>redeem</mat-icon> Apply to this request
+              </button>
+            }
+          </div>
+        }
+
         <div class="actions-row">
           <button mat-flat-button color="primary" (click)="addPayment()"><mat-icon>add</mat-icon> Add Payment</button>
           <button mat-stroked-button color="primary" (click)="settle()" [disabled]="request().remainingAmount <= 0">
@@ -63,11 +75,11 @@ import { StockRequest, StockRequestPayment, PaymentStatusLabels } from '../../co
 
         <table mat-table [dataSource]="payments()" class="full">
           <ng-container matColumnDef="srNo"><th mat-header-cell *matHeaderCellDef>Sr. No.</th><td mat-cell *matCellDef="let p; let i = index">{{ i + 1 }}</td></ng-container>
-          <ng-container matColumnDef="date"><th mat-header-cell *matHeaderCellDef>Date</th><td mat-cell *matCellDef="let p">{{ p.paymentDate | date:'mediumDate' }}</td></ng-container>
+          <ng-container matColumnDef="date"><th mat-header-cell *matHeaderCellDef>Date</th><td mat-cell *matCellDef="let p">{{ p.paymentDate | date:'dd-MM-yyyy' }}</td></ng-container>
           <ng-container matColumnDef="amount"><th mat-header-cell *matHeaderCellDef>Amount</th><td mat-cell *matCellDef="let p">{{ p.amount | currency:'INR' }}</td></ng-container>
           <ng-container matColumnDef="method"><th mat-header-cell *matHeaderCellDef>Method</th><td mat-cell *matCellDef="let p">{{ p.method }}</td></ng-container>
           <ng-container matColumnDef="note"><th mat-header-cell *matHeaderCellDef>Note</th><td mat-cell *matCellDef="let p">{{ p.note }}</td></ng-container>
-          <ng-container matColumnDef="actions"><th mat-header-cell *matHeaderCellDef></th><td mat-cell *matCellDef="let p"><button mat-icon-button (click)="deletePayment(p)"><mat-icon>delete</mat-icon></button></td></ng-container>
+          <ng-container matColumnDef="actions"><th mat-header-cell *matHeaderCellDef></th><td mat-cell *matCellDef="let p">@if (p.method !== 'Advance' && p.method !== 'AdvanceTransfer') { <button mat-icon-button (click)="deletePayment(p)"><mat-icon>delete</mat-icon></button> }</td></ng-container>
           <tr mat-header-row *matHeaderRowDef="columns"></tr>
           <tr mat-row *matRowDef="let row; columns: columns"></tr>
         </table>
@@ -85,6 +97,15 @@ import { StockRequest, StockRequestPayment, PaymentStatusLabels } from '../../co
     .summary span { font-weight:600; }
     .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
     .actions-row { display:flex; gap:12px; margin:8px 0 12px; flex-wrap:wrap; }
+    .advance-banner {
+      display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+      background:#cfe2ff; color:#084298; border-radius:8px;
+      padding:8px 12px; margin-bottom:12px; font-weight:500;
+    }
+    .advance-banner span { font-weight:700; }
+    .advance-banner mat-icon { color:#084298; }
+    .advance-banner .apply-btn { margin-left:auto; }
+    .advance-banner .apply-btn mat-icon { color:inherit; }
   `
 })
 export class RequestPaymentDialog implements OnInit {
@@ -93,6 +114,7 @@ export class RequestPaymentDialog implements OnInit {
 
   request = signal<StockRequest>(inject<StockRequest>(MAT_DIALOG_DATA));
   payments = signal<StockRequestPayment[]>([]);
+  advance = signal<number>(0);   // salesperson's available advance balance
   changed = false;
 
   amount = signal<number>(0);
@@ -102,27 +124,36 @@ export class RequestPaymentDialog implements OnInit {
   columns = ['srNo', 'date', 'amount', 'method', 'note', 'actions'];
   payLabel = PaymentStatusLabels;
 
-  ngOnInit() { this.loadPayments(); }
+  ngOnInit() { this.loadPayments(); this.loadAdvance(); }
 
   loadPayments() {
     this.api.getRequestPayments(this.request().id).subscribe(list => this.payments.set(list));
+  }
+
+  loadAdvance() {
+    this.api.getRequestAdvance().subscribe(a => this.advance.set(a.advanceBalance));
   }
 
   addPayment() {
     const amt = Number(this.amount());
     if (amt <= 0) return;
     this.api.addRequestPayment({ stockRequestId: this.request().id, amount: amt, method: this.method(), note: this.note() })
-      .subscribe(updated => { this.request.set(updated); this.changed = true; this.amount.set(0); this.note.set(''); this.loadPayments(); });
+      .subscribe(updated => { this.request.set(updated); this.changed = true; this.amount.set(0); this.note.set(''); this.loadPayments(); this.loadAdvance(); });
+  }
+
+  applyAdvance() {
+    this.api.applyRequestAdvance(this.request().id)
+      .subscribe(updated => { this.request.set(updated); this.changed = true; this.loadPayments(); this.loadAdvance(); });
   }
 
   settle() {
     this.api.settleRequest(this.request().id)
-      .subscribe(updated => { this.request.set(updated); this.changed = true; this.loadPayments(); });
+      .subscribe(updated => { this.request.set(updated); this.changed = true; this.loadPayments(); this.loadAdvance(); });
   }
 
   deletePayment(p: StockRequestPayment) {
     this.api.deleteRequestPayment(p.id)
-      .subscribe(updated => { this.request.set(updated); this.changed = true; this.loadPayments(); });
+      .subscribe(updated => { this.request.set(updated); this.changed = true; this.loadPayments(); this.loadAdvance(); });
   }
 
   close() { this.ref.close(this.changed); }

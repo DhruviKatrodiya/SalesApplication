@@ -3,9 +3,10 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  Category, SubCategory, Item, Customer, CustomerSearchResult,
+  Category, SubCategory, Item, Customer, CustomerSearchResult, CustomerAdvance,
   Order, OrderStatus, Payment, Dispatch, ReceivedStatus,
-  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment
+  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment, StockRequestAdvance,
+  Truck, TruckStockItem, ItemPriceHistory
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -80,6 +81,7 @@ export class ApiService {
   createItem(b: any) { return this.http.post<Item>(`${this.base}/items`, b); }
   updateItem(id: number, b: any) { return this.http.put<Item>(`${this.base}/items/${id}`, b); }
   deleteItem(id: number) { return this.http.delete(`${this.base}/items/${id}`); }
+  getItemPriceHistory(id: number) { return this.http.get<ItemPriceHistory>(`${this.base}/items/${id}/price-history`); }
 
   // ---- Dispatch ----
   getDispatches(opts?: { truck?: string; date?: string; page?: number; pageSize?: number }) {
@@ -94,6 +96,7 @@ export class ApiService {
     return this.http.post<Dispatch>(`${this.base}/dispatch`, b);
   }
   // Unsaved dispatch cart, persisted per user (each line carries its truck)
+  getDispatchTruckLabels() { return this.http.get<string[]>(`${this.base}/dispatch/trucks`); }
   getDispatchDraft() { return this.http.get<DispatchDraft>(`${this.base}/dispatch/draft`); }
   saveDispatchDraft(b: DispatchDraft) { return this.http.put<DispatchDraft>(`${this.base}/dispatch/draft`, b); }
   clearDispatchDraft() { return this.http.delete(`${this.base}/dispatch/draft`); }
@@ -129,6 +132,7 @@ export class ApiService {
     return this.getCustomers({ ...opts, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
   }
   getCustomerDetails(id: number) { return this.http.get<CustomerSearchResult>(`${this.base}/customers/${id}/details`); }
+  getCustomerAdvance(id: number) { return this.http.get<CustomerAdvance>(`${this.base}/customers/${id}/advance`); }
   searchCustomers(query: string) {
     const p = new HttpParams().set('query', query);
     return this.http.get<CustomerSearchResult[]>(`${this.base}/customers/search`, { params: p });
@@ -137,9 +141,22 @@ export class ApiService {
   updateCustomer(id: number, b: any) { return this.http.put<Customer>(`${this.base}/customers/${id}`, b); }
   deleteCustomer(id: number) { return this.http.delete(`${this.base}/customers/${id}`); }
 
-  // ---- Orders ----
-  getOrders(opts?: { customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; page?: number; pageSize?: number }) {
+  // ---- Trucks ----
+  getTrucks(opts?: { search?: string; withStock?: boolean }) {
     let p = new HttpParams();
+    if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.withStock) p = p.set('withStock', true);
+    return this.http.get<Truck[]>(`${this.base}/trucks`, { params: p });
+  }
+  getTruckStock(truckId: number) { return this.http.get<TruckStockItem[]>(`${this.base}/trucks/${truckId}/stock`); }
+  createTruck(name: string) { return this.http.post<Truck>(`${this.base}/trucks`, { name }); }
+  updateTruck(id: number, name: string) { return this.http.put<Truck>(`${this.base}/trucks/${id}`, { name }); }
+  deleteTruck(id: number) { return this.http.delete(`${this.base}/trucks/${id}`); }
+
+  // ---- Orders ----
+  getOrders(opts?: { orderNumber?: string; customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.orderNumber) p = p.set('orderNumber', opts.orderNumber);
     if (opts?.customer) p = p.set('customer', opts.customer);
     if (opts?.orderDate) p = p.set('orderDate', opts.orderDate);
     if (opts?.status != null) p = p.set('status', opts.status);
@@ -169,12 +186,25 @@ export class ApiService {
     return this.http.post<Order>(`${this.base}/payments`, b);
   }
   settleOrder(orderId: number) { return this.http.post<Order>(`${this.base}/payments/settle/${orderId}`, {}); }
+  applyAdvance(orderId: number, amount?: number) {
+    return this.http.post<Order>(`${this.base}/payments/apply-advance/${orderId}`, { amount: amount ?? null });
+  }
+  downloadInvoice(orderId: number) {
+    return this.http.get(`${this.base}/orders/${orderId}/invoice`, { responseType: 'blob' });
+  }
+  emailInvoice(orderId: number) {
+    return this.http.post<{ message: string }>(`${this.base}/orders/${orderId}/invoice/email`, {});
+  }
   deletePayment(id: number) { return this.http.delete<Order>(`${this.base}/payments/${id}`); }
 
   // ---- Stock requests ("My Orders") ----
-  getStockRequests(opts?: { status?: number; page?: number; pageSize?: number }) {
+  getStockRequests(opts?: { requestNumber?: string; date?: string; item?: string; status?: number; paymentStatus?: number; page?: number; pageSize?: number }) {
     let p = new HttpParams();
+    if (opts?.requestNumber) p = p.set('requestNumber', opts.requestNumber);
+    if (opts?.date) p = p.set('date', opts.date);
+    if (opts?.item) p = p.set('item', opts.item);
     if (opts?.status != null) p = p.set('status', opts.status);
+    if (opts?.paymentStatus != null) p = p.set('paymentStatus', opts.paymentStatus);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<StockRequest>>(`${this.base}/stock-requests`, { params: p });
@@ -197,6 +227,10 @@ export class ApiService {
   }
   settleRequest(requestId: number) { return this.http.post<StockRequest>(`${this.base}/stock-request-payments/settle/${requestId}`, {}); }
   deleteRequestPayment(id: number) { return this.http.delete<StockRequest>(`${this.base}/stock-request-payments/${id}`); }
+  getRequestAdvance() { return this.http.get<StockRequestAdvance>(`${this.base}/stock-request-payments/advance`); }
+  applyRequestAdvance(requestId: number, amount?: number) {
+    return this.http.post<StockRequest>(`${this.base}/stock-request-payments/apply-advance/${requestId}`, { amount: amount ?? null });
+  }
 
   // ---- Reports ----
   monthlyReport(year: number, month: number | undefined, page: number, pageSize: number) {

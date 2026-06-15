@@ -1,0 +1,55 @@
+<div class="page">
+  <div class="page-header">
+    <h1>Trucks</h1>
+    <button mat-flat-button color="primary" (click)="add()"><mat-icon>add</mat-icon> Add Truck</button>
+  </div>
+
+  <mat-card class="table-card">
+    <mat-card-content>
+      <mat-form-field appearance="fill" class="full" subscriptSizing="dynamic" style="margin-bottom:28px">
+        <mat-label>Search trucks</mat-label>
+        <input matInput [ngModel]="search()" (ngModelChange)="setSearch($event)" placeholder="truck name" />
+        @if (search()) {
+          <button mat-icon-button matSuffix aria-label="Clear" (click)="setSearch('')"><mat-icon>close</mat-icon></button>
+        } @else {
+          <mat-icon matSuffix>search</mat-icon>
+        }
+      </mat-form-field>
+
+      <table mat-table [dataSource]="trucks()">
+        <ng-container matColumnDef="srNo">
+          <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
+          <td mat-cell *matCellDef="let row; let i = index">{{ i + 1 }}</td>
+        </ng-container>
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Truck</th>
+          <td mat-cell *matCellDef="let t">{{ t.name }}</td>
+        </ng-container>
+        <ng-container matColumnDef="items">
+          <th mat-header-cell *matHeaderCellDef>Items Loaded</th>
+          <td mat-cell *matCellDef="let t">{{ t.itemCount }}</td>
+        </ng-container>
+        <ng-container matColumnDef="units">
+          <th mat-header-cell *matHeaderCellDef>Total Units</th>
+          <td mat-cell *matCellDef="let t">{{ t.totalUnits }}</td>
+        </ng-container>
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let t">
+            <button mat-icon-button (click)="edit(t)"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button (click)="remove(t)"><mat-icon>delete</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+      @if (!trucks().length) {
+        @if (search()) {
+          <div class="empty">No trucks match "{{ search() }}".</div>
+        } @else {
+          <div class="empty">No trucks yet. Click "Add Truck".</div>
+        }
+      }
+    </mat-card-content>
+  </mat-card>
+</div>

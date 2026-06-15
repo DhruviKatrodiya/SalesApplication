@@ -31,7 +31,9 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Email</mat-label>
-          <input matInput formControlName="email" />
+          <input matInput type="email" formControlName="email" required />
+          @if (form.controls.email.hasError('required')) { <mat-error>Email is required</mat-error> }
+          @if (form.controls.email.hasError('email')) { <mat-error>Enter a valid email address</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Route</mat-label>
@@ -114,7 +116,7 @@ export class CustomerDialog {
   form = this.fb.nonNullable.group({
     name: [this.data.customer?.name ?? '', Validators.required],
     phone: [this.data.customer?.phone ?? '', [Validators.required, Validators.pattern(/^\d{7,15}$/)]],
-    email: [this.data.customer?.email ?? ''],
+    email: [this.data.customer?.email ?? '', [Validators.required, Validators.email]],
     routeId: [this.data.customer?.routeId ?? null as number | null],
     address: [this.data.customer?.address ?? '']
   });

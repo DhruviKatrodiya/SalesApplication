@@ -12,6 +12,10 @@ public class Order
     public int? SalesmanId { get; set; }
     public AppUser? Salesman { get; set; }
 
+    // For Dispatch-source orders: the truck whose stock this order draws from.
+    public int? TruckId { get; set; }
+    public Truck? Truck { get; set; }
+
     public DateTime OrderDate { get; set; } = DateTime.UtcNow;
     public DateTime? DeliveryDate { get; set; }
 

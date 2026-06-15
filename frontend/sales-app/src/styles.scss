@@ -121,6 +121,10 @@ table.mat-mdc-table { width: 100%; }
   color: var(--mat-sys-on-surface-variant);
 }
 
+/* Keep multiple form-field suffix icons (e.g. a datepicker toggle + a clear button)
+   on a single row instead of stacking them vertically. */
+.mat-mdc-form-field-icon-suffix { display: inline-flex; align-items: center; }
+
 /* Lay action-column buttons (View / Edit / Delete …) out horizontally in every table. */
 .mat-mdc-table td.mat-column-actions {
   white-space: nowrap;

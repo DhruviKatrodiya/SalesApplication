@@ -8,6 +8,12 @@
     <mat-card-content>
       <div class="filters">
         <mat-form-field appearance="fill" class="f-customer">
+          <mat-label>Order #</mat-label>
+          <input matInput [ngModel]="orderNumberFilter()" (ngModelChange)="setOrderNumberFilter($event)" placeholder="Search order number" />
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="f-customer">
           <mat-label>Customer Name</mat-label>
           <input matInput [ngModel]="customerFilter()" (ngModelChange)="setCustomerFilter($event)" placeholder="Search customer" />
           <mat-icon matSuffix>search</mat-icon>
@@ -52,11 +58,11 @@
         </ng-container>
         <ng-container matColumnDef="orderDate">
           <th mat-header-cell *matHeaderCellDef>Order Date</th>
-          <td mat-cell *matCellDef="let o">{{ o.orderDate | date:'mediumDate' }}</td>
+          <td mat-cell *matCellDef="let o">{{ o.orderDate | date:'dd-MM-yyyy' }}</td>
         </ng-container>
         <ng-container matColumnDef="delivery">
           <th mat-header-cell *matHeaderCellDef>Delivery</th>
-          <td mat-cell *matCellDef="let o">{{ o.deliveryDate ? (o.deliveryDate | date:'mediumDate') : '-' }}</td>
+          <td mat-cell *matCellDef="let o">{{ o.deliveryDate ? (o.deliveryDate | date:'dd-MM-yyyy') : '-' }}</td>
         </ng-container>
         <ng-container matColumnDef="status">
           <th mat-header-cell *matHeaderCellDef>Status</th>
@@ -83,6 +89,7 @@
             <button mat-icon-button matTooltip="Items — mark received status" (click)="viewItems(o)"><mat-icon>checklist</mat-icon></button>
             <button mat-icon-button matTooltip="Edit order" [disabled]="isLocked(o)" (click)="edit(o)"><mat-icon>edit</mat-icon></button>
             <button mat-icon-button matTooltip="Delete" (click)="remove(o)"><mat-icon>delete</mat-icon></button>
+            <button mat-icon-button matTooltip="Download Invoice (PDF)" (click)="downloadInvoice(o)"><mat-icon>download</mat-icon></button>
           </td>
         </ng-container>
 

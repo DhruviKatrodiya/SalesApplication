@@ -17,6 +17,9 @@ public class AppDbContext : DbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Dispatch> Dispatches => Set<Dispatch>();
     public DbSet<DispatchItem> DispatchItems => Set<DispatchItem>();
+    public DbSet<Truck> Trucks => Set<Truck>();
+    public DbSet<TruckStock> TruckStocks => Set<TruckStock>();
+    public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
     public DbSet<DispatchDraft> DispatchDrafts => Set<DispatchDraft>();
@@ -40,6 +43,7 @@ public class AppDbContext : DbContext
         // Unique email for app user
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
         b.Entity<Order>().HasIndex(x => x.OrderNumber).IsUnique();
+        b.Entity<StockRequest>().HasIndex(x => x.RequestNumber).IsUnique();
         b.Entity<PasswordResetOtp>().HasIndex(x => x.Email);
         b.Entity<DispatchDraft>().HasIndex(x => x.UserId).IsUnique();   // one draft per user (each line carries its truck)
 
@@ -60,6 +64,32 @@ public class AppDbContext : DbContext
         b.Entity<Order>()
             .HasOne(x => x.Salesman).WithMany()
             .HasForeignKey(x => x.SalesmanId).OnDelete(DeleteBehavior.SetNull);
+
+        // Dispatch-source orders reference the truck they drew from; deleting a truck
+        // just unassigns it from past orders.
+        b.Entity<Order>()
+            .HasOne(x => x.Truck).WithMany()
+            .HasForeignKey(x => x.TruckId).OnDelete(DeleteBehavior.SetNull);
+
+        // Trucks and their per-item stock.
+        b.Entity<Truck>().HasIndex(x => new { x.UserId, x.Name }).IsUnique();
+        b.Entity<TruckStock>().HasIndex(x => new { x.TruckId, x.ItemId }).IsUnique();
+        b.Entity<TruckStock>()
+            .HasOne(x => x.Truck).WithMany(t => t.Stock)
+            .HasForeignKey(x => x.TruckId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<TruckStock>()
+            .HasOne(x => x.Item).WithMany()
+            .HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+
+        // Inventory batches (purchase-price history per item).
+        b.Entity<InventoryBatch>().Property(x => x.PurchasePrice).HasPrecision(18, 2);
+        b.Entity<InventoryBatch>().HasIndex(x => new { x.ItemId, x.CreatedAt });
+        b.Entity<InventoryBatch>()
+            .HasOne(x => x.Item).WithMany()
+            .HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<InventoryBatch>()
+            .HasOne(x => x.StockRequest).WithMany()
+            .HasForeignKey(x => x.StockRequestId).OnDelete(DeleteBehavior.SetNull);
 
         // A customer optionally belongs to a delivery route; deleting a route
         // just unassigns its customers (sets RouteId to null).

@@ -140,12 +140,18 @@ public class CustomersController : OwnedControllerBase
             .Where(o => o.CustomerId == c.Id)
             .Include(o => o.Customer)
             .Include(o => o.Items).ThenInclude(i => i.Item)
+            .Include(o => o.Payments)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
         var totalOrdered = orders.Sum(o => o.TotalAmount);
-        var totalPaid = orders.Sum(o => o.PaidAmount);
-        var totalRemaining = orders.Sum(o => o.RemainingAmount);
+        var totalPaid = orders.Sum(o => o.PaidAmount);                 // all money received (advance entries net out)
+        var advanceBalance = OrderMath.AdvanceBalance(orders);         // extra paid, still unused
+        var orderPayments = totalPaid - advanceBalance;               // money applied to orders
+        var advanceUsed = orders.SelectMany(o => o.Payments)          // advance already applied to orders
+            .Where(p => p.Method == PaymentMethods.Advance).Sum(p => p.Amount);
+        // Outstanding due, computed defensively so it is never reduced by overpayments on other orders.
+        var totalRemaining = orders.Sum(o => Math.Max(0, o.TotalAmount - o.PaidAmount));
 
         string overall = totalPaid <= 0 ? "Pending"
             : totalRemaining <= 0 ? "Paid"
@@ -155,7 +161,17 @@ public class CustomersController : OwnedControllerBase
         var delivered = orders.Count(o => o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed);
 
         return new CustomerSearchResult(
-            Mappers.ToDto(c), totalOrdered, totalPaid, totalRemaining, overall,
+            Mappers.ToDto(c), totalOrdered, totalPaid, totalRemaining,
+            orderPayments, advanceBalance, advanceUsed, overall,
             pending, delivered, orders.Select(Mappers.ToDto).ToList());
+    }
+
+    /// <summary>The customer's available advance balance (money paid beyond their order totals).</summary>
+    [HttpGet("{id:int}/advance")]
+    public async Task<ActionResult<CustomerAdvanceDto>> Advance(int id)
+    {
+        if (!await _db.Customers.AnyAsync(x => x.Id == id && x.UserId == CurrentUserId)) return NotFound();
+        var orders = await _db.Orders.Where(o => o.CustomerId == id).ToListAsync();
+        return Ok(new CustomerAdvanceDto(OrderMath.AdvanceBalance(orders)));
     }
 }

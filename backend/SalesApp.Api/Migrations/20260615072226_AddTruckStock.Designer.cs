@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SalesApp.Api.Data;
 
@@ -11,9 +12,11 @@ using SalesApp.Api.Data;
 namespace SalesApp.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260615072226_AddTruckStock")]
+    partial class AddTruckStock
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -230,42 +233,6 @@ namespace SalesApp.Api.Migrations
                     b.HasIndex("ItemId");
 
                     b.ToTable("DispatchItems");
-                });
-
-            modelBuilder.Entity("SalesApp.Api.Models.InventoryBatch", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ItemId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("PurchasePrice")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("StockRequestId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StockRequestId");
-
-                    b.HasIndex("ItemId", "CreatedAt");
-
-                    b.ToTable("InventoryBatches");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.Item", b =>
@@ -507,7 +474,7 @@ namespace SalesApp.Api.Migrations
 
                     b.Property<string>("RequestNumber")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("SalesmanId")
                         .HasColumnType("int");
@@ -520,9 +487,6 @@ namespace SalesApp.Api.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("RequestNumber")
-                        .IsUnique();
 
                     b.HasIndex("SalesmanId");
 
@@ -705,24 +669,6 @@ namespace SalesApp.Api.Migrations
                     b.Navigation("Dispatch");
 
                     b.Navigation("Item");
-                });
-
-            modelBuilder.Entity("SalesApp.Api.Models.InventoryBatch", b =>
-                {
-                    b.HasOne("SalesApp.Api.Models.Item", "Item")
-                        .WithMany()
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SalesApp.Api.Models.StockRequest", "StockRequest")
-                        .WithMany()
-                        .HasForeignKey("StockRequestId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Item");
-
-                    b.Navigation("StockRequest");
                 });
 
             modelBuilder.Entity("SalesApp.Api.Models.Item", b =>

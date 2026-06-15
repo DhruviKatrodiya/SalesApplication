@@ -40,6 +40,12 @@ export interface Item {
   id: number; subCategoryId: number; subCategoryName: string; categoryName: string;
   name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number;
 }
+export interface InventoryBatch { id: number; quantity: number; purchasePrice: number; createdAt: string; sourceRequestNumber?: string | null; }
+export interface ItemPriceHistory {
+  itemId: number; name: string; stockQuantity: number;
+  oldestPrice: number; latestPrice: number; avgCost: number; stockValue: number;
+  batches: InventoryBatch[];
+}
 
 // ---- Stock requests ("My Orders") ----
 export enum StockRequestStatus { Pending = 0, Fulfilled = 1, Cancelled = 2, Done = 3 }
@@ -51,6 +57,7 @@ export interface StockRequest {
   notes?: string; items: StockRequestItem[];
 }
 export interface StockRequestPayment { id: number; stockRequestId: number; amount: number; paymentDate: string; method?: string; note?: string; }
+export interface StockRequestAdvance { totalPaid: number; requestPayments: number; advanceBalance: number; advanceUsed: number; }
 
 // ---- Dispatch ----
 export interface DispatchItem { itemId: number; itemName: string; quantity: number; }
@@ -67,10 +74,13 @@ export interface Customer {
 export interface CustomerSearchResult {
   customer: Customer;
   totalOrdered: number; totalPaid: number; totalRemaining: number;
+  // totalPaid = orderPayments + advanceBalance. advanceUsed = advance already applied to orders.
+  orderPayments: number; advanceBalance: number; advanceUsed: number;
   overallPaymentStatus: string;
   pendingOrders: number; deliveredOrders: number;
   orders: Order[];
 }
+export interface CustomerAdvance { advanceBalance: number; }
 
 // ---- Orders ----
 export interface OrderItem {
@@ -83,7 +93,12 @@ export interface Order {
   status: OrderStatus; paymentStatus: PaymentStatus; source: OrderSource;
   totalAmount: number; paidAmount: number; remainingAmount: number;
   notes?: string; items: OrderItem[];
+  truckId?: number | null; truckName?: string | null;
 }
+
+// ---- Trucks (managed list, each carries its own per-item stock) ----
+export interface Truck { id: number; name: string; createdAt: string; itemCount: number; totalUnits: number; }
+export interface TruckStockItem { itemId: number; name: string; sku?: string; unit?: string; quantity: number; unitPrice: number; }
 
 // ---- Payments ----
 export interface Payment {

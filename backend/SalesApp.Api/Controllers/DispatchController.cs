@@ -40,7 +40,7 @@ public class DispatchController : ControllerBase
         if (!string.IsNullOrWhiteSpace(truck))
         {
             var t = truck.Trim();
-            query = query.Where(d => d.TruckLabel.Contains(t));
+            query = query.Where(d => d.TruckLabel == t);   // exact match (selected from the truck filter dropdown)
         }
         if (date is not null)
         {
@@ -57,6 +57,20 @@ public class DispatchController : ControllerBase
             .ToListAsync();
 
         return Ok(new PagedResult<DispatchDto>(pageItems.Select(Map).ToList(), total, page, pageSize));
+    }
+
+    /// <summary>Distinct truck labels that appear in this user's dispatch history (for the history filter).</summary>
+    [HttpGet("trucks")]
+    public async Task<ActionResult<IEnumerable<string>>> TruckLabels()
+    {
+        var uid = CurrentUserId;
+        var labels = await _db.Dispatches
+            .Where(d => d.UserId == uid)
+            .Select(d => d.TruckLabel)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync();
+        return Ok(labels);
     }
 
     [HttpGet("{id:int}")]
@@ -95,6 +109,16 @@ public class DispatchController : ControllerBase
         }
 
         var truck = string.IsNullOrWhiteSpace(req.TruckLabel) ? "Truck-1" : req.TruckLabel!.Trim();
+
+        // Resolve (or auto-register) the managed truck so its per-truck stock can be loaded.
+        var truckEntity = await _db.Trucks.Include(t => t.Stock)
+            .FirstOrDefaultAsync(t => t.UserId == uid && t.Name == truck);
+        if (truckEntity is null)
+        {
+            truckEntity = new Truck { UserId = uid, Name = truck };
+            _db.Trucks.Add(truckEntity);
+        }
+
         var dayStart = DateTime.UtcNow.Date;
         var dayEnd = dayStart.AddDays(1);
 
@@ -118,7 +142,12 @@ public class DispatchController : ControllerBase
         {
             var item = items[line.ItemId];
             item.StockQuantity -= line.Quantity;    // leaves the godown
-            item.DispatchStock += line.Quantity;    // ...and is loaded onto the truck
+            item.DispatchStock += line.Quantity;    // ...and is loaded onto the truck (aggregate, all trucks)
+
+            // Add to this specific truck's own stock ledger.
+            var ts = truckEntity.Stock.FirstOrDefault(s => s.ItemId == line.ItemId);
+            if (ts is null) { ts = new TruckStock { ItemId = line.ItemId, Quantity = 0 }; truckEntity.Stock.Add(ts); }
+            ts.Quantity += line.Quantity;
 
             // Sum quantity if this item is already on the truck's entry; otherwise add a line.
             var existingLine = dispatch.Items.FirstOrDefault(x => x.ItemId == line.ItemId);

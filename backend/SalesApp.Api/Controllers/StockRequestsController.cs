@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SalesApp.Api.Data;
 using SalesApp.Api.DTOs;
 using SalesApp.Api.Models;
+using SalesApp.Api.Services;
 
 namespace SalesApp.Api.Controllers;
 
@@ -31,7 +32,8 @@ public class StockRequestsController : ControllerBase
 
     private static StockRequestDto Map(StockRequest r) => new(
         r.Id, r.RequestNumber, r.CreatedAt, r.Status,
-        r.TotalAmount, r.PaidAmount, r.RemainingAmount, r.PaymentStatus, r.Notes,
+        // Remaining derived so it's never negative — overpayment shows as advance balance.
+        r.TotalAmount, r.PaidAmount, Math.Max(0, r.TotalAmount - r.PaidAmount), r.PaymentStatus, r.Notes,
         r.Items.Select(i => new StockRequestItemDto(
             i.ItemId, i.Item?.Name ?? string.Empty, i.Quantity, i.Item?.StockQuantity ?? 0,
             i.UnitPrice, i.LineTotal)).ToList());
@@ -66,22 +68,51 @@ public class StockRequestsController : ControllerBase
     internal static void RecalcPayment(StockRequest r)
     {
         r.PaidAmount = r.Payments.Sum(p => p.Amount);
-        r.RemainingAmount = r.TotalAmount - r.PaidAmount;
+        // Never a negative due: overpayment is tracked as the salesperson's advance balance.
+        r.RemainingAmount = Math.Max(0, r.TotalAmount - r.PaidAmount);
         if (r.PaidAmount <= 0) r.PaymentStatus = PaymentStatus.Pending;
         else if (r.PaidAmount >= r.TotalAmount && r.TotalAmount > 0) r.PaymentStatus = PaymentStatus.Paid;
         else r.PaymentStatus = r.Status == StockRequestStatus.Pending ? PaymentStatus.Advance : PaymentStatus.Partial;
     }
 
+    /// <summary>Overpayment on a single request — the part that becomes advance.</summary>
+    internal static decimal OverpaidOn(StockRequest r) => Math.Max(0, r.PaidAmount - r.TotalAmount);
+    /// <summary>Salesperson advance = money paid beyond what each request required.</summary>
+    internal static decimal AdvanceBalance(IEnumerable<StockRequest> requests) => requests.Sum(OverpaidOn);
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockRequestDto>>> GetAll(
-        [FromQuery] StockRequestStatus? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+        [FromQuery] string? requestNumber, [FromQuery] DateTime? date, [FromQuery] string? item,
+        [FromQuery] StockRequestStatus? status, [FromQuery] PaymentStatus? paymentStatus,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+        if (status is not null && !Enum.IsDefined(status.Value))
+            return BadRequest(new MessageResponse("Invalid status filter."));
+        if (paymentStatus is not null && !Enum.IsDefined(paymentStatus.Value))
+            return BadRequest(new MessageResponse("Invalid payment status filter."));
 
         var uid = CurrentUserId;
         var query = WithIncludes().Where(r => r.SalesmanId == uid);
+        if (!string.IsNullOrWhiteSpace(requestNumber))
+        {
+            var t = requestNumber.Trim();
+            query = query.Where(r => r.RequestNumber.Contains(t));
+        }
+        if (date is not null)
+        {
+            var day = date.Value.Date;
+            var next = day.AddDays(1);
+            query = query.Where(r => r.CreatedAt >= day && r.CreatedAt < next);
+        }
+        if (!string.IsNullOrWhiteSpace(item))
+        {
+            var t = item.Trim();
+            query = query.Where(r => r.Items.Any(i => i.Item!.Name.Contains(t)));
+        }
         if (status is not null) query = query.Where(r => r.Status == status);
+        if (paymentStatus is not null) query = query.Where(r => r.PaymentStatus == paymentStatus);
 
         var ordered = query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id);
         var total = await ordered.CountAsync();
@@ -117,6 +148,10 @@ public class StockRequestsController : ControllerBase
         };
         await BuildLinesAsync(request, req.Items);
         RecalcPayment(request);   // no payments yet -> Pending
+
+        // Validate the generated number's prefix/date/sequence format before persisting.
+        if (!DocNumber.IsValid(request.RequestNumber, "REQ"))
+            return StatusCode(500, new MessageResponse("Failed to generate a valid request number."));
 
         _db.StockRequests.Add(request);
         await _db.SaveChangesAsync();
@@ -157,9 +192,32 @@ public class StockRequestsController : ControllerBase
 
         var itemIds = request.Items.Select(i => i.ItemId).ToList();
         var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var batchedItemIds = await _db.InventoryBatches.Where(b => itemIds.Contains(b.ItemId))
+            .Select(b => b.ItemId).Distinct().ToListAsync();
         foreach (var line in request.Items)
-            if (items.TryGetValue(line.ItemId, out var item))
-                item.StockQuantity += line.Quantity;   // requested stock received -> restock inventory
+        {
+            if (!items.TryGetValue(line.ItemId, out var item)) continue;
+
+            // Pre-existing stock with no batch yet -> capture it as an opening batch at the current price,
+            // so old stock keeps its old price instead of being lumped in with the new price.
+            if (!batchedItemIds.Contains(item.Id) && item.StockQuantity > 0)
+            {
+                _db.InventoryBatches.Add(new InventoryBatch
+                {
+                    UserId = item.UserId, ItemId = item.Id, Quantity = item.StockQuantity, PurchasePrice = item.UnitPrice
+                });
+                batchedItemIds.Add(item.Id);
+            }
+
+            // New received stock keeps its own purchase price (does not overwrite older batches).
+            _db.InventoryBatches.Add(new InventoryBatch
+            {
+                UserId = item.UserId, ItemId = item.Id, Quantity = line.Quantity,
+                PurchasePrice = line.UnitPrice, StockRequestId = request.Id
+            });
+            item.StockQuantity += line.Quantity;   // requested stock received -> restock inventory
+            item.UnitPrice = line.UnitPrice;       // display the latest price (history preserved in batches)
+        }
 
         request.Status = StockRequestStatus.Fulfilled;
         RecalcPayment(request);   // partial payment now reads as "Partial"
@@ -194,7 +252,8 @@ public class StockRequestsController : ControllerBase
         if (request.Status == StockRequestStatus.Cancelled || request.Status == StockRequestStatus.Done)
             return BadRequest(new MessageResponse("This request can no longer be cancelled."));
 
-        // If it was already fulfilled, return the stock it added back out of inventory.
+        // If it was already fulfilled, return the stock it added back out of inventory
+        // and remove the batches this request created (keep price history consistent).
         if (request.Status == StockRequestStatus.Fulfilled)
         {
             var itemIds = request.Items.Select(i => i.ItemId).ToList();
@@ -202,6 +261,9 @@ public class StockRequestsController : ControllerBase
             foreach (var line in request.Items)
                 if (items.TryGetValue(line.ItemId, out var item))
                     item.StockQuantity -= line.Quantity;
+
+            var batches = await _db.InventoryBatches.Where(b => b.StockRequestId == id).ToListAsync();
+            _db.InventoryBatches.RemoveRange(batches);
         }
 
         request.Status = StockRequestStatus.Cancelled;
@@ -224,8 +286,12 @@ public class StockRequestsController : ControllerBase
 
     private async Task<string> GenerateNumberAsync()
     {
-        var year = DateTime.UtcNow.Year;
-        var count = await _db.StockRequests.CountAsync(r => r.CreatedAt.Year == year);
-        return $"REQ-{year}-{(count + 1):D4}";
+        var now = DateTime.UtcNow;
+        // Monthly sequence: count this month's requests so the number resets to 000001 each month.
+        var seq = await _db.StockRequests.CountAsync(r => r.CreatedAt.Year == now.Year && r.CreatedAt.Month == now.Month) + 1;
+        var number = DocNumber.Format("REQ", now, seq);
+        while (await _db.StockRequests.AnyAsync(r => r.RequestNumber == number))
+            number = DocNumber.Format("REQ", now, ++seq);
+        return number;
     }
 }
