@@ -17,13 +17,14 @@ public class CategoriesController : OwnedControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<CategoryDto>>> GetAll(
-        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+        [FromQuery] string? search, [FromQuery] string? active, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
         var uid = CurrentUserId;
         var query = _db.Categories.Where(c => c.UserId == uid);
+        if (active != "all") query = query.Where(c => c.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -35,7 +36,7 @@ public class CategoriesController : OwnedControllerBase
             .OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(c => new CategoryDto(c.Id, c.Name, c.Description, c.SubCategories.Count))
+            .Select(c => new CategoryDto(c.Id, c.Name, c.Description, c.SubCategories.Count, c.IsActive))
             .ToListAsync();
 
         return Ok(new PagedResult<CategoryDto>(items, total, page, pageSize));
@@ -76,7 +77,17 @@ public class CategoriesController : OwnedControllerBase
     {
         var c = await _db.Categories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (c is null) return NotFound();
-        _db.Categories.Remove(c);
+        c.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var c = await _db.Categories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (c is null) return NotFound();
+        c.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

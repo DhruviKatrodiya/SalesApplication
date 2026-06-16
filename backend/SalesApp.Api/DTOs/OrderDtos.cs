@@ -4,7 +4,7 @@ namespace SalesApp.Api.DTOs;
 
 // Customers
 public record CustomerRequest(string Name, string? Phone, string? Email, string? Address, int? RouteId);
-public record CustomerDto(int Id, string Name, string? Phone, string? Email, string? Address, int? RouteId, string? RouteName, DateTime CreatedAt);
+public record CustomerDto(int Id, string Name, string? Phone, string? Email, string? Address, int? RouteId, string? RouteName, DateTime CreatedAt, bool IsActive = true);
 
 // Orders
 public record OrderItemRequest(int ItemId, int Quantity, decimal? UnitPrice);
@@ -23,7 +23,7 @@ public record OrderDto(
     OrderStatus Status, PaymentStatus PaymentStatus, OrderSource Source,
     decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount,
     string? Notes, List<OrderItemDto> Items,
-    int? TruckId = null, string? TruckName = null);
+    int? TruckId = null, string? TruckName = null, bool IsActive = true);
 
 public record UpdateOrderStatusRequest(OrderStatus Status);
 public record UpdateDeliveryDateRequest(DateTime? DeliveryDate);

@@ -17,13 +17,14 @@ public class RoutesController : OwnedControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<RouteDto>>> GetAll(
-        [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+        [FromQuery] string? search, [FromQuery] string? active, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
         var uid = CurrentUserId;
         var query = _db.Routes.Where(r => r.UserId == uid);
+        if (active != "all") query = query.Where(r => r.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
@@ -35,7 +36,7 @@ public class RoutesController : OwnedControllerBase
         var items = await ordered
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(r => new RouteDto(r.Id, r.Name, r.Description, r.Customers.Count))
+            .Select(r => new RouteDto(r.Id, r.Name, r.Description, r.Customers.Count, r.IsActive))
             .ToListAsync();
 
         return Ok(new PagedResult<RouteDto>(items, total, page, pageSize));
@@ -75,7 +76,17 @@ public class RoutesController : OwnedControllerBase
     {
         var r = await _db.Routes.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (r is null) return NotFound();
-        _db.Routes.Remove(r);   // customers on this route are unassigned (RouteId -> null)
+        r.IsActive = false;   // soft delete; customers keep their route assignment
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var r = await _db.Routes.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (r is null) return NotFound();
+        r.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

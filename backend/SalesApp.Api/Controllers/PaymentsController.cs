@@ -80,7 +80,7 @@ public class PaymentsController : ControllerBase
             .Include(o => o.Customer)
             .Include(o => o.Items).ThenInclude(i => i.Item)
             .Include(o => o.Payments)
-            .Where(o => o.CustomerId == target0.CustomerId)
+            .Where(o => o.CustomerId == target0.CustomerId && o.IsActive)
             .ToListAsync();
         var target = customerOrders.First(o => o.Id == orderId);
 

@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -18,7 +19,7 @@ import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-categories',
-  imports: [FormsModule, MatCardModule, MatTableModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatPaginatorModule],
+  imports: [FormsModule, MatCardModule, MatTableModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule],
   templateUrl: './categories.html',
   styleUrl: './categories.scss'
 })
@@ -34,9 +35,11 @@ export class Categories implements OnInit {
 
   categorySearch = signal('');
   subCategorySearch = signal('');
+  catStatus = signal<'active' | 'inactive' | 'all'>('all');
+  subStatus = signal<'active' | 'inactive' | 'all'>('all');
 
-  catColumns = ['srNo', 'name', 'description', 'subCount', 'actions'];
-  subColumns = ['srNo', 'name', 'description', 'itemCount', 'actions'];
+  catColumns = ['srNo', 'name', 'description', 'subCount', 'status', 'actions'];
+  subColumns = ['srNo', 'name', 'description', 'itemCount', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   catPager = createServerPager(() => this.loadCategories());
@@ -55,6 +58,7 @@ export class Categories implements OnInit {
   loadCategories() {
     this.api.getCategories({
       search: this.categorySearch(),
+      active: this.catStatus(),
       page: this.catPager.pageIndex() + 1,
       pageSize: this.catPager.pageSize()
     }).subscribe(res => {
@@ -81,6 +85,12 @@ export class Categories implements OnInit {
     this.loadCategories();
   }
 
+  setCatStatus(v: 'active' | 'inactive' | 'all') {
+    this.catStatus.set(v);
+    this.catPager.reset();
+    this.loadCategories();
+  }
+
   select(c: Category) {
     this.selected.set(c);
     this.subCategorySearch.set('');
@@ -94,6 +104,7 @@ export class Categories implements OnInit {
     this.api.getSubCategories({
       categoryId: sel.id,
       search: this.subCategorySearch(),
+      active: this.subStatus(),
       page: this.subPager.pageIndex() + 1,
       pageSize: this.subPager.pageSize()
     }).subscribe(res => {
@@ -110,6 +121,12 @@ export class Categories implements OnInit {
 
   setSubCategorySearch(v: string) {
     this.subCategorySearch.set(v);
+    this.subPager.reset();
+    this.loadSubs();
+  }
+
+  setSubStatus(v: 'active' | 'inactive' | 'all') {
+    this.subStatus.set(v);
     this.subPager.reset();
     this.loadSubs();
   }
@@ -164,6 +181,13 @@ export class Categories implements OnInit {
     }).afterClosed().subscribe(res => {
       if (res) this.api.updateSubCategory(s.id, res).subscribe(() => { this.snack.open('Sub-category updated', 'Close', { duration: 2000 }); this.loadCategories(); this.loadSubs(); });
     });
+  }
+  activateCategory(c: Category, ev: Event) {
+    ev.stopPropagation();
+    this.api.activateCategory(c.id).subscribe(() => { this.snack.open('Category activated', 'Close', { duration: 2000 }); this.afterCategoryChange(); });
+  }
+  activateSub(s: SubCategory) {
+    this.api.activateSubCategory(s.id).subscribe(() => { this.snack.open('Sub-category activated', 'Close', { duration: 2000 }); this.loadCategories(); this.loadSubs(); });
   }
   deleteSub(s: SubCategory) {
     this.confirm(`Delete sub-category "${s.name}"?`).subscribe(ok => {

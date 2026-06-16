@@ -7,21 +7,21 @@ public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int Pa
 
 // Routes (delivery routes)
 public record RouteRequest(string Name, string? Description);
-public record RouteDto(int Id, string Name, string? Description, int CustomerCount);
+public record RouteDto(int Id, string Name, string? Description, int CustomerCount, bool IsActive = true);
 
 // Categories
 public record CategoryRequest(string Name, string? Description);
-public record CategoryDto(int Id, string Name, string? Description, int SubCategoryCount);
+public record CategoryDto(int Id, string Name, string? Description, int SubCategoryCount, bool IsActive = true);
 
 // SubCategories
 public record SubCategoryRequest(int CategoryId, string Name, string? Description);
-public record SubCategoryDto(int Id, int CategoryId, string CategoryName, string Name, string? Description, int ItemCount);
+public record SubCategoryDto(int Id, int CategoryId, string CategoryName, string Name, string? Description, int ItemCount, bool IsActive = true);
 
 // Items / Inventory
 public record ItemRequest(int SubCategoryId, string Name, string? Sku, string? Unit, int StockQuantity, decimal UnitPrice);
 public record ItemDto(
     int Id, int SubCategoryId, string SubCategoryName, string CategoryName,
-    string Name, string? Sku, string? Unit, int StockQuantity, int DispatchStock, decimal UnitPrice);
+    string Name, string? Sku, string? Unit, int StockQuantity, int DispatchStock, decimal UnitPrice, bool IsActive = true);
 
 // Inventory batches (purchase-price history)
 public record InventoryBatchDto(int Id, int Received, int Remaining, decimal PurchasePrice, DateTime CreatedAt, string? SourceRequestNumber);
@@ -41,7 +41,7 @@ public record StockRequestItemDto(int ItemId, string ItemName, int Quantity, int
 public record StockRequestDto(
     int Id, string RequestNumber, DateTime CreatedAt, StockRequestStatus Status,
     decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount, PaymentStatus PaymentStatus,
-    string? Notes, List<StockRequestItemDto> Items);
+    string? Notes, List<StockRequestItemDto> Items, bool IsActive = true);
 
 // Stock-request payments
 public record StockRequestPaymentRequest(int StockRequestId, decimal Amount, DateTime? PaymentDate, string? Method, string? Note);
@@ -52,7 +52,7 @@ public record StockRequestAdvanceDto(decimal TotalPaid, decimal RequestPayments,
 
 // Trucks (managed list, each with its own per-item stock)
 public record TruckRequest(string Name);
-public record TruckDto(int Id, string Name, DateTime CreatedAt, int ItemCount, int TotalUnits);
+public record TruckDto(int Id, string Name, DateTime CreatedAt, int ItemCount, int TotalUnits, bool IsActive = true);
 // One line of a truck's stock — shaped like an order item picker option.
 public record TruckStockItemDto(
     int ItemId, string Name, string? Sku, string? Unit, int Quantity, decimal UnitPrice);

@@ -17,7 +17,7 @@ public class ItemsController : OwnedControllerBase
 
     private static ItemDto Map(Item i) => new(
         i.Id, i.SubCategoryId, i.SubCategory!.Name, i.SubCategory.Category!.Name,
-        i.Name, i.Sku, i.Unit, i.StockQuantity, i.DispatchStock, i.UnitPrice);
+        i.Name, i.Sku, i.Unit, i.StockQuantity, i.DispatchStock, i.UnitPrice, i.IsActive);
 
     private IQueryable<Item> WithIncludes() =>
         _db.Items.Include(i => i.SubCategory).ThenInclude(s => s!.Category)
@@ -27,12 +27,13 @@ public class ItemsController : OwnedControllerBase
     public async Task<ActionResult<PagedResult<ItemDto>>> GetAll(
         [FromQuery] int? subCategoryId, [FromQuery] bool lowStock = false, [FromQuery] int threshold = 10,
         [FromQuery] string? category = null, [FromQuery] string? item = null, [FromQuery] string? sku = null,
-        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+        [FromQuery] string? active = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
         var query = WithIncludes();
+        if (active != "all") query = query.Where(i => i.IsActive == (active != "inactive"));
         if (subCategoryId is not null) query = query.Where(i => i.SubCategoryId == subCategoryId);
         if (lowStock) query = query.Where(i => i.StockQuantity <= threshold);
         if (!string.IsNullOrWhiteSpace(category))
@@ -175,11 +176,17 @@ public class ItemsController : OwnedControllerBase
     {
         var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (i is null) return NotFound();
-        // Inventory movements have no cascade delete (NoAction) — clear them first; batches cascade.
-        var txns = await _db.InventoryTransactions.Where(t => t.ItemId == id).ToListAsync();
-        _db.InventoryTransactions.RemoveRange(txns);
+        i.IsActive = false;   // soft delete; inventory batches & movements are preserved
         await _db.SaveChangesAsync();
-        _db.Items.Remove(i);
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (i is null) return NotFound();
+        i.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

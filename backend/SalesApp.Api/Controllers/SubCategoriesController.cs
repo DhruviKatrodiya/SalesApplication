@@ -17,7 +17,7 @@ public class SubCategoriesController : OwnedControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<SubCategoryDto>>> GetAll(
-        [FromQuery] int? categoryId, [FromQuery] string? search,
+        [FromQuery] int? categoryId, [FromQuery] string? search, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -25,6 +25,7 @@ public class SubCategoriesController : OwnedControllerBase
 
         var uid = CurrentUserId;
         var query = _db.SubCategories.Include(s => s.Category).Where(s => s.UserId == uid);
+        if (active != "all") query = query.Where(s => s.IsActive == (active != "inactive"));
         if (categoryId is not null) query = query.Where(s => s.CategoryId == categoryId);
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -38,7 +39,7 @@ public class SubCategoriesController : OwnedControllerBase
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new SubCategoryDto(
-                s.Id, s.CategoryId, s.Category!.Name, s.Name, s.Description, s.Items.Count))
+                s.Id, s.CategoryId, s.Category!.Name, s.Name, s.Description, s.Items.Count, s.IsActive))
             .ToListAsync();
 
         return Ok(new PagedResult<SubCategoryDto>(items, total, page, pageSize));
@@ -89,7 +90,17 @@ public class SubCategoriesController : OwnedControllerBase
     {
         var s = await _db.SubCategories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (s is null) return NotFound();
-        _db.SubCategories.Remove(s);
+        s.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var s = await _db.SubCategories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (s is null) return NotFound();
+        s.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

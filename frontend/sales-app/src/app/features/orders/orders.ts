@@ -25,13 +25,14 @@ import { PaymentDialog } from './payment-dialog';
 import { OrderItemsDialog } from './order-items-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { DateInputDirective } from '../../shared/date-input.directive';
 
 @Component({
   selector: 'app-orders',
   imports: [
     FormsModule, DatePipe, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
-    MatTooltipModule, MatPaginatorModule
+    MatTooltipModule, MatPaginatorModule, DateInputDirective
   ],
   templateUrl: './orders.html',
   styleUrl: './orders.scss'
@@ -54,14 +55,15 @@ export class Orders implements OnInit {
   orderNumberFilter = signal<string>('');
   customerFilter = signal<string>('');
   orderDateFilter = signal<Date | null>(null);
-  deliveryStatusFilter = signal<OrderStatus | null>(null);
-  paidStatusFilter = signal<PaymentStatus | null>(null);
+  deliveryStatusFilter = signal<number>(-1);   // -1 = "All" (shown selected by default)
+  paidStatusFilter = signal<number>(-1);       // -1 = "All"
+  activeFilter = signal<'active' | 'inactive' | 'all'>('all');
 
   hasFilters = computed(() =>
     !!this.orderNumberFilter() || !!this.customerFilter() || !!this.orderDateFilter() ||
-    this.deliveryStatusFilter() != null || this.paidStatusFilter() != null);
+    this.deliveryStatusFilter() >= 0 || this.paidStatusFilter() >= 0 || this.activeFilter() !== 'all');
 
-  columns = ['orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'actions'];
+  columns = ['orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'active', 'actions'];
 
   orderStatusLabel = OrderStatusLabels;
   paymentStatusLabel = PaymentStatusLabels;
@@ -76,14 +78,16 @@ export class Orders implements OnInit {
   setOrderNumberFilter(v: string) { this.orderNumberFilter.set(v); this.reload(); }
   setCustomerFilter(v: string) { this.customerFilter.set(v); this.reload(); }
   setOrderDateFilter(v: Date | null) { this.orderDateFilter.set(v); this.reload(); }
-  setDeliveryStatusFilter(v: OrderStatus | null) { this.deliveryStatusFilter.set(v); this.reload(); }
-  setPaidStatusFilter(v: PaymentStatus | null) { this.paidStatusFilter.set(v); this.reload(); }
+  setDeliveryStatusFilter(v: number) { this.deliveryStatusFilter.set(v); this.reload(); }
+  setPaidStatusFilter(v: number) { this.paidStatusFilter.set(v); this.reload(); }
+  setActiveFilter(v: 'active' | 'inactive' | 'all') { this.activeFilter.set(v); this.reload(); }
   clearFilters() {
     this.orderNumberFilter.set('');
     this.customerFilter.set('');
     this.orderDateFilter.set(null);
-    this.deliveryStatusFilter.set(null);
-    this.paidStatusFilter.set(null);
+    this.deliveryStatusFilter.set(-1);
+    this.paidStatusFilter.set(-1);
+    this.activeFilter.set('all');
     this.reload();
   }
 
@@ -101,8 +105,9 @@ export class Orders implements OnInit {
       orderNumber: this.orderNumberFilter() || undefined,
       customer: this.customerFilter() || undefined,
       orderDate: d ? this.toIsoDate(d) : undefined,
-      status: this.deliveryStatusFilter() ?? undefined,
-      paymentStatus: this.paidStatusFilter() ?? undefined,
+      status: this.deliveryStatusFilter() >= 0 ? (this.deliveryStatusFilter() as OrderStatus) : undefined,
+      paymentStatus: this.paidStatusFilter() >= 0 ? this.paidStatusFilter() : undefined,
+      active: this.activeFilter(),
       mine: this.mine || undefined,
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
@@ -176,6 +181,9 @@ export class Orders implements OnInit {
     });
   }
 
+  activate(o: Order) {
+    this.api.activateOrder(o.id).subscribe(() => { this.snack.open('Order activated', 'Close', { duration: 2000 }); this.load(); });
+  }
   remove(o: Order) {
     this.dialog.open(ConfirmDialog, { data: { title: 'Confirm', message: `Delete order ${o.orderNumber}?` } })
       .afterClosed().subscribe(ok => {

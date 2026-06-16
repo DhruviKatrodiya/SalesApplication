@@ -91,6 +91,13 @@ public class InvoiceService : IInvoiceService
 
                     if (!string.IsNullOrWhiteSpace(order.Notes))
                         col.Item().PaddingTop(6).Text($"Notes: {order.Notes}").FontColor(Colors.Grey.Darken1);
+
+                    // Current order & payment status, shown at the end of the invoice.
+                    col.Item().PaddingTop(6).Column(c =>
+                    {
+                        c.Item().Text($"Order Status: {order.Status}").Bold();
+                        c.Item().Text($"Payment Status: {order.PaymentStatus}").Bold();
+                    });
                 });
 
                 page.Footer().AlignCenter().Text(t =>

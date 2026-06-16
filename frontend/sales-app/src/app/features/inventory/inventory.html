@@ -10,38 +10,39 @@
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Category</mat-label>
           <input matInput [ngModel]="categoryFilter()" (ngModelChange)="setCategoryFilter($event)" placeholder="category name" />
-          @if (categoryFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setCategoryFilter('')"><mat-icon>close</mat-icon></button>
-          } @else {
-            <mat-icon matSuffix>search</mat-icon>
-          }
+          <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Item</mat-label>
           <input matInput [ngModel]="itemFilter()" (ngModelChange)="setItemFilter($event)" placeholder="item name" />
-          @if (itemFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setItemFilter('')"><mat-icon>close</mat-icon></button>
-          } @else {
-            <mat-icon matSuffix>search</mat-icon>
-          }
+          <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>SKU</mat-label>
           <input matInput [ngModel]="skuFilter()" (ngModelChange)="setSkuFilter($event)" placeholder="SKU" />
-          @if (skuFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setSkuFilter('')"><mat-icon>close</mat-icon></button>
-          } @else {
-            <mat-icon matSuffix>search</mat-icon>
-          }
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" subscriptSizing="dynamic">
+          <mat-label>Status</mat-label>
+          <mat-select [ngModel]="status()" (ngModelChange)="setStatus($event)">
+            <mat-option value="all">All</mat-option>
+            <mat-option value="active">Active</mat-option>
+            <mat-option value="inactive">Inactive</mat-option>
+          </mat-select>
         </mat-form-field>
       </div>
 
-      <div class="row" style="margin-bottom:12px">
+      <div class="row" style="margin-bottom:12px; gap:16px; align-items:center">
         <mat-checkbox [ngModel]="lowOnly()" (ngModelChange)="setLowOnly($event)">Low stock only (&le; 10)</mat-checkbox>
+        @if (hasFilters()) {
+          <button mat-stroked-button (click)="clearFilters()"><mat-icon>clear</mat-icon> Clear</button>
+        }
       </div>
 
+      <div class="table-scroll">
       <table mat-table [dataSource]="items()">
         <ng-container matColumnDef="srNo">
           <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
@@ -83,17 +84,28 @@
           <th mat-header-cell *matHeaderCellDef>Unit Price</th>
           <td mat-cell *matCellDef="let i">{{ i.unitPrice | currency:'INR' }}</td>
         </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let i">
+            <span class="status-chip" [class.inactive]="!i.isActive">{{ i.isActive ? 'Active' : 'Inactive' }}</span>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let i">
             <button mat-icon-button (click)="priceHistory(i)" aria-label="Price history"><mat-icon>history</mat-icon></button>
             <button mat-icon-button (click)="edit(i)"><mat-icon>edit</mat-icon></button>
-            <button mat-icon-button (click)="remove(i)"><mat-icon>delete</mat-icon></button>
+            @if (i.isActive) {
+              <button mat-icon-button title="Delete" (click)="remove(i)"><mat-icon>delete</mat-icon></button>
+            } @else {
+              <button mat-icon-button title="Activate" (click)="activate(i)"><mat-icon>restore</mat-icon></button>
+            }
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="columns"></tr>
         <tr mat-row *matRowDef="let row; columns: columns"></tr>
       </table>
+      </div>
       @if (!items().length) { <div class="empty">No items found.</div> }
       <mat-paginator [length]="pager.total()" [pageSize]="pager.pageSize()" [pageIndex]="pager.pageIndex()"
         [pageSizeOptions]="pageSizeOptions" (page)="pager.onPage($event)" showFirstLastButtons />

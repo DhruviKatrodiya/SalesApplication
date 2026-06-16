@@ -32,13 +32,13 @@ export interface DispatchDraftItem { itemId: number; quantity: number; truckLabe
 export interface DispatchDraft { truckLabel?: string | null; notes?: string | null; items: DispatchDraftItem[]; }
 
 // ---- Catalog ----
-export interface Category { id: number; name: string; description?: string; subCategoryCount: number; }
+export interface Category { id: number; name: string; description?: string; subCategoryCount: number; isActive: boolean; }
 export interface SubCategory {
-  id: number; categoryId: number; categoryName: string; name: string; description?: string; itemCount: number;
+  id: number; categoryId: number; categoryName: string; name: string; description?: string; itemCount: number; isActive: boolean;
 }
 export interface Item {
   id: number; subCategoryId: number; subCategoryName: string; categoryName: string;
-  name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number;
+  name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number; isActive: boolean;
 }
 export interface InventoryBatch { id: number; received: number; remaining: number; purchasePrice: number; createdAt: string; sourceRequestNumber?: string | null; }
 export interface ItemPriceHistory {
@@ -58,7 +58,7 @@ export interface StockRequestItem { itemId: number; itemName: string; quantity: 
 export interface StockRequest {
   id: number; requestNumber: string; createdAt: string; status: StockRequestStatus;
   totalAmount: number; paidAmount: number; remainingAmount: number; paymentStatus: PaymentStatus;
-  notes?: string; items: StockRequestItem[];
+  notes?: string; items: StockRequestItem[]; isActive: boolean;
 }
 export interface StockRequestPayment { id: number; stockRequestId: number; amount: number; paymentDate: string; method?: string; note?: string; }
 export interface StockRequestAdvance { totalPaid: number; requestPayments: number; advanceBalance: number; advanceUsed: number; }
@@ -70,10 +70,10 @@ export interface Dispatch {
 }
 
 // ---- Customers ----
-export interface Route { id: number; name: string; description?: string; customerCount: number; }
+export interface Route { id: number; name: string; description?: string; customerCount: number; isActive: boolean; }
 export interface Customer {
   id: number; name: string; phone?: string; email?: string; address?: string;
-  routeId?: number | null; routeName?: string | null; createdAt: string;
+  routeId?: number | null; routeName?: string | null; createdAt: string; isActive: boolean;
 }
 export interface CustomerSearchResult {
   customer: Customer;
@@ -97,11 +97,11 @@ export interface Order {
   status: OrderStatus; paymentStatus: PaymentStatus; source: OrderSource;
   totalAmount: number; paidAmount: number; remainingAmount: number;
   notes?: string; items: OrderItem[];
-  truckId?: number | null; truckName?: string | null;
+  truckId?: number | null; truckName?: string | null; isActive: boolean;
 }
 
 // ---- Trucks (managed list, each carries its own per-item stock) ----
-export interface Truck { id: number; name: string; createdAt: string; itemCount: number; totalUnits: number; }
+export interface Truck { id: number; name: string; createdAt: string; itemCount: number; totalUnits: number; isActive: boolean; }
 export interface TruckStockItem { itemId: number; name: string; sku?: string; unit?: string; quantity: number; unitPrice: number; }
 
 // ---- Payments ----

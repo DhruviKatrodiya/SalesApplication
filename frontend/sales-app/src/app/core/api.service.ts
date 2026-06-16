@@ -29,9 +29,10 @@ export class ApiService {
   }
 
   // ---- Categories ----
-  getCategories(opts?: { search?: string; page?: number; pageSize?: number }) {
+  getCategories(opts?: { search?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Category>>(`${this.base}/categories`, { params: p });
@@ -43,12 +44,14 @@ export class ApiService {
   createCategory(b: { name: string; description?: string }) { return this.http.post<Category>(`${this.base}/categories`, b); }
   updateCategory(id: number, b: { name: string; description?: string }) { return this.http.put<Category>(`${this.base}/categories/${id}`, b); }
   deleteCategory(id: number) { return this.http.delete(`${this.base}/categories/${id}`); }
+  activateCategory(id: number) { return this.http.put(`${this.base}/categories/${id}/activate`, {}); }
 
   // ---- SubCategories ----
-  getSubCategories(opts?: { categoryId?: number; search?: string; page?: number; pageSize?: number }) {
+  getSubCategories(opts?: { categoryId?: number; search?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.categoryId) p = p.set('categoryId', opts.categoryId);
     if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<SubCategory>>(`${this.base}/subcategories`, { params: p });
@@ -60,11 +63,13 @@ export class ApiService {
   createSubCategory(b: { categoryId: number; name: string; description?: string }) { return this.http.post<SubCategory>(`${this.base}/subcategories`, b); }
   updateSubCategory(id: number, b: { categoryId: number; name: string; description?: string }) { return this.http.put<SubCategory>(`${this.base}/subcategories/${id}`, b); }
   deleteSubCategory(id: number) { return this.http.delete(`${this.base}/subcategories/${id}`); }
+  activateSubCategory(id: number) { return this.http.put(`${this.base}/subcategories/${id}/activate`, {}); }
 
   // ---- Items / Inventory ----
-  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string; page?: number; pageSize?: number }) {
+  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.subCategoryId) p = p.set('subCategoryId', opts.subCategoryId);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.lowStock) p = p.set('lowStock', true);
     if (opts?.threshold != null) p = p.set('threshold', opts.threshold);
     if (opts?.category) p = p.set('category', opts.category);
@@ -81,6 +86,7 @@ export class ApiService {
   createItem(b: any) { return this.http.post<Item>(`${this.base}/items`, b); }
   updateItem(id: number, b: any) { return this.http.put<Item>(`${this.base}/items/${id}`, b); }
   deleteItem(id: number) { return this.http.delete(`${this.base}/items/${id}`); }
+  activateItem(id: number) { return this.http.put(`${this.base}/items/${id}/activate`, {}); }
   getItemPriceHistory(id: number) { return this.http.get<ItemPriceHistory>(`${this.base}/items/${id}/price-history`); }
   getItemMovements(id: number) { return this.http.get<InventoryMovement[]>(`${this.base}/items/${id}/movements`); }
 
@@ -103,9 +109,10 @@ export class ApiService {
   clearDispatchDraft() { return this.http.delete(`${this.base}/dispatch/draft`); }
 
   // ---- Routes ----
-  getRoutes(opts?: { search?: string; page?: number; pageSize?: number }) {
+  getRoutes(opts?: { search?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.search) p = p.set('search', opts.search);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Route>>(`${this.base}/routes`, { params: p });
@@ -117,11 +124,13 @@ export class ApiService {
   createRoute(b: { name: string; description?: string }) { return this.http.post<Route>(`${this.base}/routes`, b); }
   updateRoute(id: number, b: { name: string; description?: string }) { return this.http.put<Route>(`${this.base}/routes/${id}`, b); }
   deleteRoute(id: number) { return this.http.delete(`${this.base}/routes/${id}`); }
+  activateRoute(id: number) { return this.http.put(`${this.base}/routes/${id}/activate`, {}); }
 
   // ---- Customers ----
-  getCustomers(opts?: { name?: string; phone?: string; routeId?: number; page?: number; pageSize?: number }) {
+  getCustomers(opts?: { name?: string; phone?: string; routeId?: number; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.name) p = p.set('name', opts.name);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.phone) p = p.set('phone', opts.phone);
     if (opts?.routeId) p = p.set('routeId', opts.routeId);
     if (opts?.page) p = p.set('page', opts.page);
@@ -141,12 +150,14 @@ export class ApiService {
   createCustomer(b: any) { return this.http.post<Customer>(`${this.base}/customers`, b); }
   updateCustomer(id: number, b: any) { return this.http.put<Customer>(`${this.base}/customers/${id}`, b); }
   deleteCustomer(id: number) { return this.http.delete(`${this.base}/customers/${id}`); }
+  activateCustomer(id: number) { return this.http.put(`${this.base}/customers/${id}/activate`, {}); }
 
   // ---- Trucks ----
-  getTrucks(opts?: { search?: string; withStock?: boolean; page?: number; pageSize?: number }) {
+  getTrucks(opts?: { search?: string; withStock?: boolean; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.search) p = p.set('search', opts.search);
     if (opts?.withStock) p = p.set('withStock', true);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Truck>>(`${this.base}/trucks`, { params: p });
@@ -159,11 +170,13 @@ export class ApiService {
   createTruck(name: string) { return this.http.post<Truck>(`${this.base}/trucks`, { name }); }
   updateTruck(id: number, name: string) { return this.http.put<Truck>(`${this.base}/trucks/${id}`, { name }); }
   deleteTruck(id: number) { return this.http.delete(`${this.base}/trucks/${id}`); }
+  activateTruck(id: number) { return this.http.put(`${this.base}/trucks/${id}/activate`, {}); }
 
   // ---- Orders ----
-  getOrders(opts?: { orderNumber?: string; customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; page?: number; pageSize?: number }) {
+  getOrders(opts?: { orderNumber?: string; customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.orderNumber) p = p.set('orderNumber', opts.orderNumber);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.customer) p = p.set('customer', opts.customer);
     if (opts?.orderDate) p = p.set('orderDate', opts.orderDate);
     if (opts?.status != null) p = p.set('status', opts.status);
@@ -186,6 +199,7 @@ export class ApiService {
     return this.http.put<Order>(`${this.base}/orders/${orderId}/items/${orderItemId}/received-status`, { receivedStatus });
   }
   deleteOrder(id: number) { return this.http.delete(`${this.base}/orders/${id}`); }
+  activateOrder(id: number) { return this.http.put(`${this.base}/orders/${id}/activate`, {}); }
 
   // ---- Payments ----
   getPaymentsByOrder(orderId: number) { return this.http.get<Payment[]>(`${this.base}/payments/by-order/${orderId}`); }
@@ -205,9 +219,10 @@ export class ApiService {
   deletePayment(id: number) { return this.http.delete<Order>(`${this.base}/payments/${id}`); }
 
   // ---- Stock requests ("My Orders") ----
-  getStockRequests(opts?: { requestNumber?: string; date?: string; item?: string; status?: number; paymentStatus?: number; page?: number; pageSize?: number }) {
+  getStockRequests(opts?: { requestNumber?: string; date?: string; item?: string; status?: number; paymentStatus?: number; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.requestNumber) p = p.set('requestNumber', opts.requestNumber);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.date) p = p.set('date', opts.date);
     if (opts?.item) p = p.set('item', opts.item);
     if (opts?.status != null) p = p.set('status', opts.status);
@@ -226,6 +241,7 @@ export class ApiService {
   doneStockRequest(id: number) { return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}/done`, {}); }
   cancelStockRequest(id: number) { return this.http.put<StockRequest>(`${this.base}/stock-requests/${id}/cancel`, {}); }
   deleteStockRequest(id: number) { return this.http.delete(`${this.base}/stock-requests/${id}`); }
+  activateStockRequest(id: number) { return this.http.put(`${this.base}/stock-requests/${id}/activate`, {}); }
 
   // Stock-request payments
   getRequestPayments(requestId: number) { return this.http.get<StockRequestPayment[]>(`${this.base}/stock-request-payments/by-request/${requestId}`); }

@@ -9,6 +9,7 @@ public class Customer
     public string? Email { get; set; }
     public string? Address { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsActive { get; set; } = true;
 
     public int? RouteId { get; set; }
     public DeliveryRoute? Route { get; set; }

@@ -22,6 +22,7 @@ public class StockRequest
     public decimal PaidAmount { get; set; }
     public decimal RemainingAmount { get; set; }
     public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
+    public bool IsActive { get; set; } = true;
 
     public ICollection<StockRequestItem> Items { get; set; } = new List<StockRequestItem>();
     public ICollection<StockRequestPayment> Payments { get; set; } = new List<StockRequestPayment>();

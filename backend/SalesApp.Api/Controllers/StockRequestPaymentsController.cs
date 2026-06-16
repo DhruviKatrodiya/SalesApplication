@@ -91,7 +91,7 @@ public class StockRequestPaymentsController : ControllerBase
     public async Task<ActionResult<StockRequestAdvanceDto>> Advance()
     {
         var uid = CurrentUserId;
-        var requests = await _db.StockRequests.Include(r => r.Payments).Where(r => r.SalesmanId == uid).ToListAsync();
+        var requests = await _db.StockRequests.Include(r => r.Payments).Where(r => r.SalesmanId == uid && r.IsActive).ToListAsync();
         var totalPaid = requests.Sum(r => r.Payments.Sum(p => p.Amount));
         var advanceBalance = StockRequestsController.AdvanceBalance(requests);
         var requestPayments = totalPaid - advanceBalance;
@@ -111,7 +111,7 @@ public class StockRequestPaymentsController : ControllerBase
         if (!await _db.StockRequests.AnyAsync(r => r.Id == requestId && r.SalesmanId == uid))
             return NotOwner();
 
-        var requests = await WithIncludes().Where(r => r.SalesmanId == uid).ToListAsync();
+        var requests = await WithIncludes().Where(r => r.SalesmanId == uid && r.IsActive).ToListAsync();
         var target = requests.First(r => r.Id == requestId);
 
         var available = StockRequestsController.AdvanceBalance(requests);

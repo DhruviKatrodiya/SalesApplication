@@ -20,12 +20,13 @@ import { RequestDialog } from './request-dialog';
 import { RequestPaymentDialog } from './request-payment-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { DateInputDirective } from '../../shared/date-input.directive';
 
 @Component({
   selector: 'app-my-orders',
   imports: [
     FormsModule, DatePipe, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, MatTooltipModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, MatTooltipModule, MatPaginatorModule, DateInputDirective
   ],
   templateUrl: './my-orders.html',
   styles: `
@@ -52,12 +53,13 @@ export class MyOrders implements OnInit {
   requestNumberFilter = signal<string>('');
   dateFilter = signal<Date | null>(null);
   itemFilter = signal<string>('');
-  statusFilter = signal<StockRequestStatus | null>(null);
-  paymentFilter = signal<number | null>(null);
+  statusFilter = signal<number>(-1);    // -1 = "All" (shown selected by default)
+  paymentFilter = signal<number>(-1);   // -1 = "All"
+  activeFilter = signal<'active' | 'inactive' | 'all'>('all');
 
   hasFilters = () =>
     !!this.requestNumberFilter() || !!this.dateFilter() || !!this.itemFilter() ||
-    this.statusFilter() != null || this.paymentFilter() != null;
+    this.statusFilter() >= 0 || this.paymentFilter() >= 0 || this.activeFilter() !== 'all';
 
   readonly Status = StockRequestStatus;
   statusLabel = StockRequestStatusLabels;
@@ -65,7 +67,7 @@ export class MyOrders implements OnInit {
   statusOptions = Object.entries(StockRequestStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
   paymentOptions = Object.entries(PaymentStatusLabels).map(([v, l]) => ({ value: +v, label: l }));
 
-  columns = ['requestNumber', 'date', 'items', 'status', 'total', 'remaining', 'payment', 'notes', 'actions'];
+  columns = ['requestNumber', 'date', 'items', 'status', 'total', 'remaining', 'payment', 'active', 'notes', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
@@ -84,8 +86,9 @@ export class MyOrders implements OnInit {
       requestNumber: this.requestNumberFilter() || undefined,
       date: d ? this.toIsoDate(d) : undefined,
       item: this.itemFilter() || undefined,
-      status: this.statusFilter() ?? undefined,
-      paymentStatus: this.paymentFilter() ?? undefined,
+      status: this.statusFilter() >= 0 ? this.statusFilter() : undefined,
+      paymentStatus: this.paymentFilter() >= 0 ? this.paymentFilter() : undefined,
+      active: this.activeFilter(),
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
     }).subscribe(res => {
@@ -107,14 +110,16 @@ export class MyOrders implements OnInit {
   setRequestNumberFilter(v: string) { this.requestNumberFilter.set(v); this.reload(); }
   setDateFilter(v: Date | null) { this.dateFilter.set(v); this.reload(); }
   setItemFilter(v: string) { this.itemFilter.set(v); this.reload(); }
-  setStatusFilter(v: StockRequestStatus | null) { this.statusFilter.set(v); this.reload(); }
-  setPaymentFilter(v: number | null) { this.paymentFilter.set(v); this.reload(); }
+  setStatusFilter(v: number) { this.statusFilter.set(v); this.reload(); }
+  setPaymentFilter(v: number) { this.paymentFilter.set(v); this.reload(); }
+  setActiveFilter(v: 'active' | 'inactive' | 'all') { this.activeFilter.set(v); this.reload(); }
   clearFilters() {
     this.requestNumberFilter.set('');
     this.dateFilter.set(null);
     this.itemFilter.set('');
-    this.statusFilter.set(null);
-    this.paymentFilter.set(null);
+    this.statusFilter.set(-1);
+    this.paymentFilter.set(-1);
+    this.activeFilter.set('all');
     this.reload();
   }
 
@@ -162,6 +167,10 @@ export class MyOrders implements OnInit {
       .afterClosed().subscribe(ok => {
         if (ok) this.api.fulfillStockRequest(r.id).subscribe(() => { this.snack.open('Request fulfilled — inventory updated', 'Close', { duration: 2500 }); this.load(); });
       });
+  }
+
+  activate(r: StockRequest) {
+    this.api.activateStockRequest(r.id).subscribe(() => { this.snack.open('Request activated', 'Close', { duration: 2000 }); this.load(); });
   }
 
   remove(r: StockRequest) {

@@ -12,6 +12,7 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatRadioModule } from '@angular/material/radio';
 import { ApiService } from '../../core/api.service';
 import { Customer, Item, Order, OrderStatus, OrderStatusLabels, OrderSource, Truck } from '../../core/models';
+import { DateInputDirective } from '../../shared/date-input.directive';
 
 interface DialogData { customers: Customer[]; items: Item[]; order: Order | null; }
 interface Line { itemId: number; itemName: string; quantity: number; unitPrice: number; }
@@ -21,7 +22,7 @@ interface PickerOption { id: number; name: string; unitPrice: number; available:
   selector: 'app-order-dialog',
   imports: [
     FormsModule, CurrencyPipe, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatButtonModule, MatIconModule, MatTableModule, MatDatepickerModule, MatRadioModule
+    MatButtonModule, MatIconModule, MatTableModule, MatDatepickerModule, MatRadioModule, DateInputDirective
   ],
   templateUrl: './order-dialog.html',
   styles: `
@@ -84,14 +85,28 @@ export class OrderDialog implements OnInit {
   });
   onTruckSelectOpened() { setTimeout(() => this.truckSearchInput()?.nativeElement.focus()); }
 
+  // Searchable customer dropdown (same in-panel search pattern as the item/truck pickers).
+  // The customer list is refreshed from the API on open (see ngOnInit).
+  customers = signal<Customer[]>(this.data.customers);
+  private customerSearchInput = viewChild<ElementRef<HTMLInputElement>>('customerSearchInput');
+  readonly customerSearch = signal('');
+  readonly filteredCustomers = computed(() => {
+    const q = this.customerSearch().toLowerCase().trim();
+    return q ? this.customers().filter(c => c.name.toLowerCase().includes(q)) : this.customers();
+  });
+  onCustomerSelectOpened() { setTimeout(() => this.customerSearchInput()?.nativeElement.focus()); }
+
   selectedItemId = signal<number | null>(null);
   qty = signal<number>(1);
 
-  // The item picker switches between the full catalog (Inventory) and the truck's stock (Dispatch).
+  // Inventory item catalog — refreshed from the API on open so stock/availability is current.
+  items = signal<Item[]>(this.data.items);
+
+  // The item picker switches between the live catalog (Inventory) and the truck's stock (Dispatch).
   readonly pickerOptions = computed<PickerOption[]>(() =>
     this.source() === OrderSource.Dispatch
       ? this.truckStock()
-      : this.data.items.map(i => ({ id: i.id, name: i.name, unitPrice: i.unitPrice, available: i.stockQuantity }))
+      : this.items().map(i => ({ id: i.id, name: i.name, unitPrice: i.unitPrice, available: i.stockQuantity }))
   );
 
   private itemSearchInput = viewChild<ElementRef<HTMLInputElement>>('itemSearchInput');
@@ -119,6 +134,9 @@ export class OrderDialog implements OnInit {
 
   ngOnInit() {
     this.loadTrucks();
+    // Refresh the customer list and inventory catalog from the API on open.
+    this.api.getAllCustomers().subscribe(list => this.customers.set(list));
+    this.api.getAllItems().subscribe(list => this.items.set(list));
     // Editing an existing dispatch order: load its truck's stock so availability is known.
     if (this.source() === OrderSource.Dispatch && this.truckId()) this.loadTruckStock(this.truckId()!);
   }

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, ElementRef, inject, signal, computed, viewChild, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
@@ -35,9 +35,19 @@ export class Customers implements OnInit {
   routes = signal<Route[]>([]);
   nameSearch = signal('');
   phoneSearch = signal('');
-  routeFilter = signal<number | null>(null);
+  routeFilter = signal<number>(0);   // 0 = "All routes" (shown selected by default)
+  status = signal<'active' | 'inactive' | 'all'>('all');
 
-  columns = ['srNo', 'name', 'phone', 'email', 'route', 'actions'];
+  // Searchable route filter (same in-panel search pattern as the other dropdowns)
+  private routeSearchInput = viewChild<ElementRef<HTMLInputElement>>('routeSearchInput');
+  readonly routeSearch = signal('');
+  readonly filteredRoutes = computed(() => {
+    const q = this.routeSearch().toLowerCase().trim();
+    return q ? this.routes().filter(r => r.name.toLowerCase().includes(q)) : this.routes();
+  });
+  onRouteOpened() { setTimeout(() => this.routeSearchInput()?.nativeElement.focus()); }
+
+  columns = ['srNo', 'name', 'phone', 'email', 'route', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
@@ -48,7 +58,8 @@ export class Customers implements OnInit {
     this.api.getCustomers({
       name: this.nameSearch() || undefined,
       phone: this.phoneSearch() || undefined,
-      routeId: this.routeFilter() ?? undefined,
+      routeId: this.routeFilter() || undefined,
+      active: this.status(),
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
     }).subscribe(res => {
@@ -67,7 +78,16 @@ export class Customers implements OnInit {
   private reload() { this.pager.reset(); this.load(); }
   setNameSearch(v: string) { this.nameSearch.set(v); this.reload(); }
   setPhoneSearch(v: string) { this.phoneSearch.set(v); this.reload(); }
-  setRouteFilter(v: number | null) { this.routeFilter.set(v); this.reload(); }
+  setRouteFilter(v: number) { this.routeFilter.set(v); this.reload(); }
+  setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.reload(); }
+  hasFilters = () => !!this.nameSearch() || !!this.phoneSearch() || this.routeFilter() > 0 || this.status() !== 'all';
+  clearFilters() {
+    this.nameSearch.set('');
+    this.phoneSearch.set('');
+    this.routeFilter.set(0);
+    this.status.set('all');
+    this.reload();
+  }
 
   viewDetails(c: Customer) {
     this.api.getCustomerDetails(c.id).subscribe(d => {
@@ -84,6 +104,9 @@ export class Customers implements OnInit {
     this.dialog.open(CustomerDialog, { data: { customer: c, routes: this.routes() } }).afterClosed().subscribe(res => {
       if (res) this.api.updateCustomer(c.id, res).subscribe(() => { this.snack.open('Customer updated', 'Close', { duration: 2000 }); this.load(); });
     });
+  }
+  activate(c: Customer) {
+    this.api.activateCustomer(c.id).subscribe(() => { this.snack.open('Customer activated', 'Close', { duration: 2000 }); this.load(); });
   }
   remove(c: Customer) {
     this.dialog.open(ConfirmDialog, { data: { title: 'Confirm', message: `Delete customer "${c.name}"?` } })

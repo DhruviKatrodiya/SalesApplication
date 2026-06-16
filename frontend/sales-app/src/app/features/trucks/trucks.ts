@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -19,7 +20,7 @@ import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
   selector: 'app-trucks',
   imports: [
     FormsModule, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule
   ],
   templateUrl: './trucks.html'
 })
@@ -30,7 +31,8 @@ export class Trucks implements OnInit {
 
   trucks = signal<Truck[]>([]);
   search = signal('');
-  columns = ['srNo', 'name', 'items', 'units', 'actions'];
+  status = signal<'active' | 'inactive' | 'all'>('all');
+  columns = ['srNo', 'name', 'items', 'units', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
@@ -40,6 +42,7 @@ export class Trucks implements OnInit {
   load() {
     this.api.getTrucks({
       search: this.search() || undefined,
+      active: this.status(),
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
     }).subscribe(res => {
@@ -51,6 +54,9 @@ export class Trucks implements OnInit {
   }
 
   setSearch(v: string) { this.search.set(v); this.pager.reset(); this.load(); }
+  setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.pager.reset(); this.load(); }
+  hasFilters = () => !!this.search() || this.status() !== 'all';
+  clearFilters() { this.search.set(''); this.status.set('all'); this.pager.reset(); this.load(); }
 
   add() {
     this.dialog.open(TruckDialog, { data: null }).afterClosed().subscribe(res => {
@@ -70,6 +76,12 @@ export class Trucks implements OnInit {
     });
   }
 
+  activate(t: Truck) {
+    this.api.activateTruck(t.id).subscribe({
+      next: () => { this.snack.open('Truck activated', 'Close', { duration: 2000 }); this.load(); },
+      error: (e) => this.snack.open(e?.error?.message ?? 'Could not activate truck.', 'Close', { duration: 4000 })
+    });
+  }
   remove(t: Truck) {
     this.dialog.open(ConfirmDialog, { data: { title: 'Confirm', message: `Delete truck "${t.name}"?` } })
       .afterClosed().subscribe(ok => {

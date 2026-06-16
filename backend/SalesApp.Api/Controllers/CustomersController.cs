@@ -18,7 +18,7 @@ public class CustomersController : OwnedControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<CustomerDto>>> GetAll(
-        [FromQuery] string? name, [FromQuery] string? phone, [FromQuery] int? routeId,
+        [FromQuery] string? name, [FromQuery] string? phone, [FromQuery] int? routeId, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -26,6 +26,7 @@ public class CustomersController : OwnedControllerBase
 
         var uid = CurrentUserId;
         var q = _db.Customers.Include(c => c.Route).Where(c => c.UserId == uid);
+        if (active != "all") q = q.Where(c => c.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(name))
         {
             var t = name.Trim();
@@ -92,7 +93,17 @@ public class CustomersController : OwnedControllerBase
     {
         var c = await _db.Customers.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (c is null) return NotFound();
-        _db.Customers.Remove(c);
+        c.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var c = await _db.Customers.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
+        if (c is null) return NotFound();
+        c.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -137,7 +148,7 @@ public class CustomersController : OwnedControllerBase
     private async Task<CustomerSearchResult> BuildDetails(Customer c)
     {
         var orders = await _db.Orders
-            .Where(o => o.CustomerId == c.Id)
+            .Where(o => o.CustomerId == c.Id && o.IsActive)
             .Include(o => o.Customer)
             .Include(o => o.Items).ThenInclude(i => i.Item)
             .Include(o => o.Payments)
@@ -171,7 +182,7 @@ public class CustomersController : OwnedControllerBase
     public async Task<ActionResult<CustomerAdvanceDto>> Advance(int id)
     {
         if (!await _db.Customers.AnyAsync(x => x.Id == id && x.UserId == CurrentUserId)) return NotFound();
-        var orders = await _db.Orders.Where(o => o.CustomerId == id).ToListAsync();
+        var orders = await _db.Orders.Where(o => o.CustomerId == id && o.IsActive).ToListAsync();
         return Ok(new CustomerAdvanceDto(OrderMath.AdvanceBalance(orders)));
     }
 }

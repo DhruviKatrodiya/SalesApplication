@@ -111,22 +111,32 @@
       <div class="search-grid">
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Truck</mat-label>
-          <mat-select [ngModel]="truckSearch()" (ngModelChange)="setTruckSearch($event)">
+          <mat-select [ngModel]="truckSearch()" (ngModelChange)="setTruckSearch($event)"
+                      (opened)="onHistoryTruckOpened()" (closed)="historyTruckSearch.set('')">
+            <div class="select-search">
+              <mat-icon class="select-search-icon">search</mat-icon>
+              <input #historyTruckSearchInput type="text" class="select-search-input" placeholder="Search truck…"
+                     [value]="historyTruckSearch()"
+                     (input)="historyTruckSearch.set($any($event.target).value)"
+                     (keydown)="$event.stopPropagation()" (click)="$event.stopPropagation()" />
+            </div>
             <mat-option [value]="''">All trucks</mat-option>
-            @for (label of historyTruckLabels(); track label) { <mat-option [value]="label">{{ label }}</mat-option> }
+            @for (label of filteredHistoryLabels(); track label) { <mat-option [value]="label">{{ label }}</mat-option> }
+            @if (!filteredHistoryLabels().length) { <div class="select-empty">No trucks found</div> }
           </mat-select>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="histDp" [ngModel]="dateSearch()" (ngModelChange)="setDateSearch($event)" />
-          @if (dateSearch()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setDateSearch(null)"><mat-icon>close</mat-icon></button>
-          }
+          <input matInput appDateInput [matDatepicker]="histDp" [ngModel]="dateSearch()" (ngModelChange)="setDateSearch($event)" placeholder="dd-mm-yyyy" />
           <mat-datepicker-toggle matSuffix [for]="histDp"></mat-datepicker-toggle>
           <mat-datepicker #histDp></mat-datepicker>
         </mat-form-field>
       </div>
+
+      @if (hasHistoryFilters()) {
+        <button mat-stroked-button (click)="clearHistoryFilters()" style="margin-bottom:16px"><mat-icon>clear</mat-icon> Clear</button>
+      }
 
       <table mat-table [dataSource]="history()">
         <ng-container matColumnDef="srNo">

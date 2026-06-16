@@ -11,15 +11,25 @@
         <button mat-flat-button color="primary" (click)="addCategory()"><mat-icon>add</mat-icon> Add</button>
       </mat-card-header>
       <mat-card-content>
-        <mat-form-field appearance="fill" class="search-field" subscriptSizing="dynamic">
-          <mat-label>Search categories</mat-label>
-          <input matInput [ngModel]="categorySearch()" (ngModelChange)="setCategorySearch($event)" placeholder="Category name" />
-          @if (categorySearch()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setCategorySearch('')"><mat-icon>close</mat-icon></button>
-          } @else {
+        <div style="display:flex; gap:12px; align-items:flex-start">
+          <mat-form-field appearance="fill" class="search-field" subscriptSizing="dynamic" style="flex:1">
+            <mat-label>Search categories</mat-label>
+            <input matInput [ngModel]="categorySearch()" (ngModelChange)="setCategorySearch($event)" placeholder="Category name" />
             <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+          <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:130px">
+            <mat-label>Status</mat-label>
+            <mat-select [ngModel]="catStatus()" (ngModelChange)="setCatStatus($event)">
+              <mat-option value="all">All</mat-option>
+              <mat-option value="active">Active</mat-option>
+              <mat-option value="inactive">Inactive</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (categorySearch() || catStatus() !== 'all') {
+            <button mat-stroked-button (click)="setCategorySearch(''); setCatStatus('all')" style="margin-top:4px"><mat-icon>clear</mat-icon> Clear</button>
           }
-        </mat-form-field>
+        </div>
+        <div class="table-scroll">
         <table mat-table [dataSource]="categories()">
           <ng-container matColumnDef="srNo">
             <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
@@ -37,12 +47,22 @@
             <th mat-header-cell *matHeaderCellDef>Subs</th>
             <td mat-cell *matCellDef="let c">{{ c.subCategoryCount }}</td>
           </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let c">
+              <span class="status-chip" [class.inactive]="!c.isActive">{{ c.isActive ? 'Active' : 'Inactive' }}</span>
+            </td>
+          </ng-container>
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let c">
               <div class="action-stack">
                 <button mat-icon-button (click)="editCategory(c, $event)"><mat-icon>edit</mat-icon></button>
-                <button mat-icon-button (click)="deleteCategory(c, $event)"><mat-icon>delete</mat-icon></button>
+                @if (c.isActive) {
+                  <button mat-icon-button title="Delete" (click)="deleteCategory(c, $event)"><mat-icon>delete</mat-icon></button>
+                } @else {
+                  <button mat-icon-button title="Activate" (click)="activateCategory(c, $event)"><mat-icon>restore</mat-icon></button>
+                }
               </div>
             </td>
           </ng-container>
@@ -50,6 +70,7 @@
           <tr mat-row *matRowDef="let row; columns: catColumns"
               (click)="select(row)" [class.selected]="row.id === selected()?.id" class="clickable"></tr>
         </table>
+        </div>
         @if (!categories().length) {
           @if (categorySearch()) {
             <div class="empty">No categories match "{{ categorySearch() }}".</div>
@@ -74,15 +95,25 @@
         @if (!selected()) {
           <div class="empty">Select a category to view its sub-categories.</div>
         } @else {
-          <mat-form-field appearance="fill" class="search-field" subscriptSizing="dynamic">
-            <mat-label>Search sub-categories</mat-label>
-            <input matInput [ngModel]="subCategorySearch()" (ngModelChange)="setSubCategorySearch($event)" placeholder="Sub-category name" />
-            @if (subCategorySearch()) {
-              <button mat-icon-button matSuffix aria-label="Clear" (click)="setSubCategorySearch('')"><mat-icon>close</mat-icon></button>
-            } @else {
+          <div style="display:flex; gap:12px; align-items:flex-start">
+            <mat-form-field appearance="fill" class="search-field" subscriptSizing="dynamic" style="flex:1">
+              <mat-label>Search sub-categories</mat-label>
+              <input matInput [ngModel]="subCategorySearch()" (ngModelChange)="setSubCategorySearch($event)" placeholder="Sub-category name" />
               <mat-icon matSuffix>search</mat-icon>
+            </mat-form-field>
+            <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:130px">
+              <mat-label>Status</mat-label>
+              <mat-select [ngModel]="subStatus()" (ngModelChange)="setSubStatus($event)">
+                <mat-option value="all">All</mat-option>
+                <mat-option value="active">Active</mat-option>
+                <mat-option value="inactive">Inactive</mat-option>
+              </mat-select>
+            </mat-form-field>
+            @if (subCategorySearch() || subStatus() !== 'all') {
+              <button mat-stroked-button (click)="setSubCategorySearch(''); setSubStatus('all')" style="margin-top:4px"><mat-icon>clear</mat-icon> Clear</button>
             }
-          </mat-form-field>
+          </div>
+          <div class="table-scroll">
           <table mat-table [dataSource]="subCategories()">
             <ng-container matColumnDef="srNo">
               <th mat-header-cell *matHeaderCellDef>Sr. No.</th>
@@ -100,18 +131,29 @@
               <th mat-header-cell *matHeaderCellDef>Items</th>
               <td mat-cell *matCellDef="let s">{{ s.itemCount }}</td>
             </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let s">
+                <span class="status-chip" [class.inactive]="!s.isActive">{{ s.isActive ? 'Active' : 'Inactive' }}</span>
+              </td>
+            </ng-container>
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef></th>
               <td mat-cell *matCellDef="let s">
                 <div class="action-stack">
                   <button mat-icon-button (click)="editSub(s)"><mat-icon>edit</mat-icon></button>
-                  <button mat-icon-button (click)="deleteSub(s)"><mat-icon>delete</mat-icon></button>
+                  @if (s.isActive) {
+                    <button mat-icon-button title="Delete" (click)="deleteSub(s)"><mat-icon>delete</mat-icon></button>
+                  } @else {
+                    <button mat-icon-button title="Activate" (click)="activateSub(s)"><mat-icon>restore</mat-icon></button>
+                  }
                 </div>
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="subColumns"></tr>
             <tr mat-row *matRowDef="let row; columns: subColumns"></tr>
           </table>
+          </div>
           @if (!subCategories().length) {
             @if (subCategorySearch()) {
               <div class="empty">No sub-categories match "{{ subCategorySearch() }}".</div>

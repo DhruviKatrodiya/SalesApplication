@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -19,7 +20,7 @@ import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
   selector: 'app-routes',
   imports: [
     FormsModule, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatPaginatorModule
   ],
   templateUrl: './routes.html'
 })
@@ -30,8 +31,9 @@ export class RoutesPage implements OnInit {
 
   routes = signal<Route[]>([]);
   search = signal('');
+  status = signal<'active' | 'inactive' | 'all'>('all');
 
-  columns = ['srNo', 'name', 'description', 'actions'];
+  columns = ['srNo', 'name', 'description', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
@@ -41,6 +43,7 @@ export class RoutesPage implements OnInit {
   load() {
     this.api.getRoutes({
       search: this.search() || undefined,
+      active: this.status(),
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize()
     }).subscribe(res => {
@@ -56,6 +59,9 @@ export class RoutesPage implements OnInit {
   }
 
   setSearch(v: string) { this.search.set(v); this.pager.reset(); this.load(); }
+  setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.pager.reset(); this.load(); }
+  hasFilters = () => !!this.search() || this.status() !== 'all';
+  clearFilters() { this.search.set(''); this.status.set('all'); this.pager.reset(); this.load(); }
 
   add() {
     this.dialog.open(RouteDialog, { data: null }).afterClosed().subscribe(res => {
@@ -66,6 +72,9 @@ export class RoutesPage implements OnInit {
     this.dialog.open(RouteDialog, { data: r }).afterClosed().subscribe(res => {
       if (res) this.api.updateRoute(r.id, res).subscribe(() => { this.snack.open('Route updated', 'Close', { duration: 2000 }); this.load(); });
     });
+  }
+  activate(r: Route) {
+    this.api.activateRoute(r.id).subscribe(() => { this.snack.open('Route activated', 'Close', { duration: 2000 }); this.load(); });
   }
   remove(r: Route) {
     const msg = r.customerCount > 0

@@ -28,6 +28,23 @@ a.active {
   background: var(--mat-sys-secondary-container);
 }
 
+/* Material keeps a grey "focused" highlight on the last-clicked nav item,
+   which looks like a second selection next to the active (blue) item.
+   Suppress the persistent focus state so only the active route is highlighted. */
+.sidenav .mat-mdc-list-item.mdc-list-item--focused,
+.sidenav .mat-mdc-list-item:focus {
+  background-color: transparent;
+}
+.sidenav .mat-mdc-list-item.mdc-list-item--focused::before,
+.sidenav .mat-mdc-list-item:focus::before {
+  opacity: 0;
+}
+/* Keep the active item's highlight even when it also holds focus. */
+.sidenav a.active.mdc-list-item--focused,
+.sidenav a.active:focus {
+  background-color: var(--mat-sys-secondary-container);
+}
+
 /* ---- Mobile bottom tab bar (app-like) ---- */
 .bottom-nav {
   flex: 0 0 auto;

@@ -45,7 +45,7 @@ public class OrdersController : ControllerBase
     public async Task<ActionResult<PagedResult<OrderDto>>> GetAll(
         [FromQuery] string? orderNumber, [FromQuery] string? customer, [FromQuery] DateTime? orderDate,
         [FromQuery] OrderStatus? status, [FromQuery] PaymentStatus? paymentStatus,
-        [FromQuery] int? customerId, [FromQuery] bool mine = false,
+        [FromQuery] int? customerId, [FromQuery] bool mine = false, [FromQuery] string? active = null,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -54,6 +54,7 @@ public class OrdersController : ControllerBase
         // Data is isolated per salesperson — always scope to the current user's own orders.
         var uid = CurrentUserId;
         var query = WithIncludes().Where(o => o.SalesmanId == uid);
+        if (active != "all") query = query.Where(o => o.IsActive == (active != "inactive"));
         if (customerId is not null) query = query.Where(o => o.CustomerId == customerId);
         if (!string.IsNullOrWhiteSpace(orderNumber))
         {
@@ -74,7 +75,7 @@ public class OrdersController : ControllerBase
         if (status is not null) query = query.Where(o => o.Status == status);
         if (paymentStatus is not null) query = query.Where(o => o.PaymentStatus == paymentStatus);
 
-        var ordered = query.OrderByDescending(o => o.OrderDate);
+        var ordered = query.OrderByDescending(o => o.CreatedAt).ThenByDescending(o => o.Id);
         var total = await ordered.CountAsync();
         var items = (await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync())
             .Select(Mappers.ToDto).ToList();
@@ -367,7 +368,18 @@ public class OrdersController : ControllerBase
         var order = await _db.Orders.FindAsync(id);
         if (order is null) return NotFound();
         if (order.SalesmanId != CurrentUserId) return NotOwner();
-        _db.Orders.Remove(order);
+        order.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var order = await _db.Orders.FindAsync(id);
+        if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
+        order.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

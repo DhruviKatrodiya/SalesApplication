@@ -16,6 +16,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { Item, Dispatch as DispatchModel, DispatchDraftItem, Truck } from '../../core/models';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
+import { DateInputDirective } from '../../shared/date-input.directive';
 
 interface CartLine { itemId: number; itemName: string; quantity: number; available: number; truckLabel: string; }
 
@@ -23,7 +24,7 @@ interface CartLine { itemId: number; itemName: string; quantity: number; availab
   selector: 'app-dispatch',
   imports: [
     FormsModule, DatePipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule, MatPaginatorModule, DateInputDirective
   ],
   templateUrl: './dispatch.html',
   styles: `
@@ -81,6 +82,15 @@ export class Dispatch implements OnInit {
   });
   onTruckSelectOpened() { setTimeout(() => this.truckPickSearchInput()?.nativeElement.focus()); }
 
+  // Searchable Dispatch-History truck filter (same pattern as the other dropdowns)
+  private historyTruckSearchInput = viewChild<ElementRef<HTMLInputElement>>('historyTruckSearchInput');
+  readonly historyTruckSearch = signal('');
+  readonly filteredHistoryLabels = computed(() => {
+    const q = this.historyTruckSearch().toLowerCase().trim();
+    return q ? this.historyTruckLabels().filter(l => l.toLowerCase().includes(q)) : this.historyTruckLabels();
+  });
+  onHistoryTruckOpened() { setTimeout(() => this.historyTruckSearchInput()?.nativeElement.focus()); }
+
   /** All items are listed; out-of-stock ones are shown but disabled (can't be dispatched). */
   readonly dispatchableItems = computed(() => this.items());
 
@@ -122,7 +132,7 @@ export class Dispatch implements OnInit {
     forkJoin({ items: this.api.getAllItems(), draft: this.api.getDispatchDraft() })
       .subscribe(({ items, draft }) => {
         this.items.set(items);
-        if (draft.truckLabel) { this.truckLabel.set(draft.truckLabel); this.truckSearch.set(draft.truckLabel); }
+        // Truck starts empty by default (not pre-filled from the draft).
         this.notes.set(draft.notes ?? '');
         this.cart.set(this.buildCart(draft.items, items));
       });
@@ -161,6 +171,8 @@ export class Dispatch implements OnInit {
 
   setTruckSearch(v: string) { this.truckSearch.set(v); this.historyPager.reset(); this.loadHistory(); }
   setDateSearch(d: Date | null) { this.dateSearch.set(d); this.historyPager.reset(); this.loadHistory(); }
+  hasHistoryFilters = () => !!this.truckSearch() || !!this.dateSearch();
+  clearHistoryFilters() { this.truckSearch.set(''); this.dateSearch.set(null); this.historyPager.reset(); this.loadHistory(); }
 
   private toIsoDate(d: Date): string {
     const y = d.getFullYear();

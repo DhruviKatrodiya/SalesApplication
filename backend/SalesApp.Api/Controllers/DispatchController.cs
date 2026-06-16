@@ -50,7 +50,7 @@ public class DispatchController : ControllerBase
             query = query.Where(d => d.DispatchDate >= day && d.DispatchDate < next);
         }
 
-        var ordered = query.OrderByDescending(d => d.DispatchDate);
+        var ordered = query.OrderByDescending(d => d.DispatchDate).ThenByDescending(d => d.Id);
         var total = await ordered.CountAsync();
         var pageItems = await ordered
             .Skip((page - 1) * pageSize)

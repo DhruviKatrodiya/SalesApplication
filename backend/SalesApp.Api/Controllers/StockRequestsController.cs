@@ -37,7 +37,7 @@ public class StockRequestsController : ControllerBase
         r.TotalAmount, r.PaidAmount, Math.Max(0, r.TotalAmount - r.PaidAmount), r.PaymentStatus, r.Notes,
         r.Items.Select(i => new StockRequestItemDto(
             i.ItemId, i.Item?.Name ?? string.Empty, i.Quantity, i.Item?.StockQuantity ?? 0,
-            i.UnitPrice, i.LineTotal)).ToList());
+            i.UnitPrice, i.LineTotal)).ToList(), r.IsActive);
 
     /// <summary>Recomputes the cost of a request's line items from item prices.</summary>
     private async Task BuildLinesAsync(StockRequest request, List<StockRequestItemRequest> lines)
@@ -84,7 +84,7 @@ public class StockRequestsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockRequestDto>>> GetAll(
         [FromQuery] string? requestNumber, [FromQuery] DateTime? date, [FromQuery] string? item,
-        [FromQuery] StockRequestStatus? status, [FromQuery] PaymentStatus? paymentStatus,
+        [FromQuery] StockRequestStatus? status, [FromQuery] PaymentStatus? paymentStatus, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -96,6 +96,7 @@ public class StockRequestsController : ControllerBase
 
         var uid = CurrentUserId;
         var query = WithIncludes().Where(r => r.SalesmanId == uid);
+        if (active != "all") query = query.Where(r => r.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(requestNumber))
         {
             var t = requestNumber.Trim();
@@ -262,7 +263,18 @@ public class StockRequestsController : ControllerBase
         var request = await _db.StockRequests.FindAsync(id);
         if (request is null) return NotFound();
         if (request.SalesmanId != CurrentUserId) return NotOwner();
-        _db.StockRequests.Remove(request);
+        request.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var request = await _db.StockRequests.FindAsync(id);
+        if (request is null) return NotFound();
+        if (request.SalesmanId != CurrentUserId) return NotOwner();
+        request.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

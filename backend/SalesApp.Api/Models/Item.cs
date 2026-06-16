@@ -14,4 +14,5 @@ public class Item
     public int DispatchStock { get; set; }       // stock loaded onto the truck (assigned for dispatch)
     public decimal UnitPrice { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsActive { get; set; } = true;
 }

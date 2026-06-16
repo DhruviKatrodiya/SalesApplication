@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, signal, computed, viewChild } from '@angular/core';
+import { Component, ElementRef, inject, signal, computed, viewChild, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CurrencyPipe } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -8,6 +8,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
+import { ApiService } from '../../core/api.service';
 import { Item, StockRequest } from '../../core/models';
 
 interface DialogData { items: Item[]; request: StockRequest | null; }
@@ -99,9 +100,14 @@ interface Line { itemId: number; itemName: string; quantity: number; currentStoc
     .select-empty { padding: 12px 16px; color: var(--mat-sys-on-surface-variant); }
   `
 })
-export class RequestDialog {
+export class RequestDialog implements OnInit {
   private ref = inject(MatDialogRef<RequestDialog>);
+  private api = inject(ApiService);
   data = inject<DialogData>(MAT_DIALOG_DATA);
+
+  // Item catalog — refreshed from the API on open so the list/stock is current.
+  items = signal<Item[]>(this.data.items);
+  ngOnInit() { this.api.getAllItems().subscribe(list => this.items.set(list)); }
 
   notes = signal<string>(this.data.request?.notes ?? '');
   selectedItemId = signal<number | null>(null);
@@ -120,7 +126,7 @@ export class RequestDialog {
   readonly search = signal('');
   readonly filteredItems = computed(() => {
     const q = this.search().toLowerCase().trim();
-    return q ? this.data.items.filter(i => i.name.toLowerCase().includes(q)) : this.data.items;
+    return q ? this.items().filter(i => i.name.toLowerCase().includes(q)) : this.items();
   });
   onOpen() { setTimeout(() => this.searchInput()?.nativeElement.focus()); }
 
@@ -128,7 +134,7 @@ export class RequestDialog {
     const id = this.selectedItemId();
     const q = Number(this.qty());
     if (!id || q <= 0) return;
-    const item = this.data.items.find(i => i.id === id);
+    const item = this.items().find(i => i.id === id);
     if (!item || item.stockQuantity <= 0) return;   // out-of-stock items can't be requested
     const existing = this.lines().find(l => l.itemId === id);
     if (existing) {

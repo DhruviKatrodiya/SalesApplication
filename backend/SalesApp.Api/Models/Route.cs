@@ -10,6 +10,7 @@ public class DeliveryRoute
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsActive { get; set; } = true;
 
     public ICollection<Customer> Customers { get; set; } = new List<Customer>();
 }

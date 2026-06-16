@@ -22,7 +22,7 @@ public class TrucksController : ControllerBase
     /// <summary>Trucks for the current user (paged), with a quick stock summary.</summary>
     [HttpGet]
     public async Task<ActionResult<PagedResult<TruckDto>>> GetAll(
-        [FromQuery] string? search, [FromQuery] bool withStock = false,
+        [FromQuery] string? search, [FromQuery] bool withStock = false, [FromQuery] string? active = null,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -30,13 +30,14 @@ public class TrucksController : ControllerBase
 
         var uid = CurrentUserId;
         var q = _db.Trucks.Include(t => t.Stock).Where(t => t.UserId == uid);
+        if (active != "all") q = q.Where(t => t.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
             q = q.Where(t => t.Name.Contains(term));
         }
-        var all = (await q.OrderBy(t => t.Name).ToListAsync())
-            .Select(t => new TruckDto(t.Id, t.Name, t.CreatedAt, t.Stock.Count(s => s.Quantity > 0), t.Stock.Sum(s => s.Quantity)))
+        var all = (await q.OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id).ToListAsync())
+            .Select(t => new TruckDto(t.Id, t.Name, t.CreatedAt, t.Stock.Count(s => s.Quantity > 0), t.Stock.Sum(s => s.Quantity), t.IsActive))
             // When the picker only wants stocked trucks, hide empty ones.
             .Where(x => !withStock || x.TotalUnits > 0)
             .ToList();
@@ -101,7 +102,17 @@ public class TrucksController : ControllerBase
         if (truck is null) return NotFound();
         if (truck.Stock.Any(s => s.Quantity > 0))
             return BadRequest(new MessageResponse("This truck still has stock loaded. Clear it before deleting."));
-        _db.Trucks.Remove(truck);
+        truck.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/activate")]
+    public async Task<IActionResult> Activate(int id)
+    {
+        var truck = await _db.Trucks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
+        if (truck is null) return NotFound();
+        truck.IsActive = true;
         await _db.SaveChangesAsync();
         return NoContent();
     }

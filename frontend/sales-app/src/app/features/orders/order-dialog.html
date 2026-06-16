@@ -36,14 +36,23 @@
     <div class="row">
       <mat-form-field appearance="fill" style="flex:1; min-width:240px">
         <mat-label>Customer</mat-label>
-        <mat-select [ngModel]="customerId()" (ngModelChange)="customerId.set($event)" #custCtrl="ngModel" required>
-          @for (c of data.customers; track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
+        <mat-select [ngModel]="customerId()" (ngModelChange)="customerId.set($event)" #custCtrl="ngModel" required
+                    (opened)="onCustomerSelectOpened()" (closed)="customerSearch.set('')">
+          <div class="select-search">
+            <mat-icon class="select-search-icon">search</mat-icon>
+            <input #customerSearchInput type="text" class="select-search-input" placeholder="Search customer…"
+                   [value]="customerSearch()"
+                   (input)="customerSearch.set($any($event.target).value)"
+                   (keydown)="$event.stopPropagation()" (click)="$event.stopPropagation()" />
+          </div>
+          @for (c of filteredCustomers(); track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
+          @if (!filteredCustomers().length) { <div class="select-empty">No customers found</div> }
         </mat-select>
         @if (custCtrl.hasError('required')) { <mat-error>Customer is required</mat-error> }
       </mat-form-field>
       <mat-form-field appearance="fill">
         <mat-label>Delivery Date</mat-label>
-        <input matInput [matDatepicker]="picker" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)" />
+        <input matInput appDateInput [matDatepicker]="picker" [ngModel]="deliveryDate()" (ngModelChange)="deliveryDate.set($event)" placeholder="dd-mm-yyyy" />
         <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
         <mat-datepicker #picker></mat-datepicker>
       </mat-form-field>

@@ -19,33 +19,26 @@
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:180px">
           <mat-label>Request #</mat-label>
           <input matInput [ngModel]="requestNumberFilter()" (ngModelChange)="setRequestNumberFilter($event)" placeholder="REQ-…" />
-          @if (requestNumberFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setRequestNumberFilter('')"><mat-icon>close</mat-icon></button>
-          } @else { <mat-icon matSuffix>search</mat-icon> }
+          <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:220px">
           <mat-label>Date</mat-label>
-          <input matInput [matDatepicker]="dp" [ngModel]="dateFilter()" (ngModelChange)="setDateFilter($event)" readonly />
+          <input matInput appDateInput [matDatepicker]="dp" [ngModel]="dateFilter()" (ngModelChange)="setDateFilter($event)" placeholder="dd-mm-yyyy" />
           <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
-          @if (dateFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setDateFilter(null)"><mat-icon>close</mat-icon></button>
-          }
           <mat-datepicker #dp></mat-datepicker>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:180px">
           <mat-label>Items</mat-label>
           <input matInput [ngModel]="itemFilter()" (ngModelChange)="setItemFilter($event)" placeholder="item name" />
-          @if (itemFilter()) {
-            <button mat-icon-button matSuffix aria-label="Clear" (click)="setItemFilter('')"><mat-icon>close</mat-icon></button>
-          } @else { <mat-icon matSuffix>search</mat-icon> }
+          <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:170px">
           <mat-label>Status</mat-label>
           <mat-select [ngModel]="statusFilter()" (ngModelChange)="setStatusFilter($event)">
-            <mat-option [value]="null">All</mat-option>
+            <mat-option [value]="-1">All</mat-option>
             @for (s of statusOptions; track s.value) { <mat-option [value]="s.value">{{ s.label }}</mat-option> }
           </mat-select>
         </mat-form-field>
@@ -53,8 +46,17 @@
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:170px">
           <mat-label>Payment Status</mat-label>
           <mat-select [ngModel]="paymentFilter()" (ngModelChange)="setPaymentFilter($event)">
-            <mat-option [value]="null">All</mat-option>
+            <mat-option [value]="-1">All</mat-option>
             @for (p of paymentOptions; track p.value) { <mat-option [value]="p.value">{{ p.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:150px">
+          <mat-label>Active</mat-label>
+          <mat-select [ngModel]="activeFilter()" (ngModelChange)="setActiveFilter($event)">
+            <mat-option value="all">All</mat-option>
+            <mat-option value="active">Active</mat-option>
+            <mat-option value="inactive">Inactive</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -63,6 +65,7 @@
         }
       </div>
 
+      <div class="table-scroll">
       <table mat-table [dataSource]="requests()">
         <ng-container matColumnDef="requestNumber">
           <th mat-header-cell *matHeaderCellDef>Request #</th>
@@ -94,6 +97,12 @@
           <th mat-header-cell *matHeaderCellDef>Payment</th>
           <td mat-cell *matCellDef="let r"><span [class]="payChipClass(r.paymentStatus)">{{ paymentLabel[r.paymentStatus] }}</span></td>
         </ng-container>
+        <ng-container matColumnDef="active">
+          <th mat-header-cell *matHeaderCellDef>Active</th>
+          <td mat-cell *matCellDef="let r">
+            <span class="status-chip" [class.inactive]="!r.isActive">{{ r.isActive ? 'Active' : 'Inactive' }}</span>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="notes">
           <th mat-header-cell *matHeaderCellDef>Notes</th>
           <td mat-cell *matCellDef="let r">{{ r.notes }}</td>
@@ -102,7 +111,9 @@
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let r">
             <button mat-icon-button matTooltip="Payments" (click)="managePayments(r)"><mat-icon>payments</mat-icon></button>
-            @if (r.status === Status.Pending) {
+            @if (!r.isActive) {
+              <button mat-icon-button matTooltip="Activate" (click)="activate(r)"><mat-icon>restore</mat-icon></button>
+            } @else if (r.status === Status.Pending) {
               <button mat-icon-button matTooltip="Mark fulfilled (restock)" (click)="fulfill(r)"><mat-icon>check_circle</mat-icon></button>
               <button mat-icon-button matTooltip="Edit" (click)="edit(r)"><mat-icon>edit</mat-icon></button>
               <button mat-icon-button matTooltip="Delete" (click)="remove(r)"><mat-icon>delete</mat-icon></button>
@@ -116,6 +127,7 @@
         <tr mat-header-row *matHeaderRowDef="columns"></tr>
         <tr mat-row *matRowDef="let row; columns: columns"></tr>
       </table>
+      </div>
       @if (!requests().length) {
         @if (hasFilters()) {
           <div class="empty">No requests match the selected filters.</div>

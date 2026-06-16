@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatSelectModule } from '@angular/material/select';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -22,7 +23,7 @@ import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
   selector: 'app-inventory',
   imports: [
     FormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatCheckboxModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatCheckboxModule, MatSelectModule, MatPaginatorModule
   ],
   templateUrl: './inventory.html',
   styles: `
@@ -46,8 +47,9 @@ export class Inventory implements OnInit {
   itemFilter = signal('');       // item name
   skuFilter = signal('');        // SKU
   lowOnly = signal(false);       // stock <= 10
+  status = signal<'active' | 'inactive' | 'all'>('all');
 
-  columns = ['srNo', 'name', 'category', 'sku', 'unit', 'stock', 'dispatchStock', 'price', 'actions'];
+  columns = ['srNo', 'name', 'category', 'sku', 'unit', 'stock', 'dispatchStock', 'price', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
@@ -56,6 +58,16 @@ export class Inventory implements OnInit {
   setItemFilter(v: string) { this.itemFilter.set(v); this.reload(); }
   setSkuFilter(v: string) { this.skuFilter.set(v); this.reload(); }
   setLowOnly(v: boolean) { this.lowOnly.set(v); this.reload(); }
+  setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.reload(); }
+  hasFilters = () => !!this.categoryFilter() || !!this.itemFilter() || !!this.skuFilter() || this.lowOnly() || this.status() !== 'all';
+  clearFilters() {
+    this.categoryFilter.set('');
+    this.itemFilter.set('');
+    this.skuFilter.set('');
+    this.lowOnly.set(false);
+    this.status.set('all');
+    this.reload();
+  }
 
   private reload() { this.pager.reset(); this.load(); }
 
@@ -70,6 +82,7 @@ export class Inventory implements OnInit {
       item: this.itemFilter() || undefined,
       sku: this.skuFilter() || undefined,
       lowStock: this.lowOnly() || undefined,
+      active: this.status(),
       page: this.pager.pageIndex() + 1,
       pageSize: this.pager.pageSize(),
     }).subscribe(res => {
@@ -105,6 +118,10 @@ export class Inventory implements OnInit {
 
   priceHistory(item: Item) {
     this.dialog.open(PriceHistoryDialog, { data: { id: item.id, name: item.name }, width: '640px', maxWidth: '95vw' });
+  }
+
+  activate(item: Item) {
+    this.api.activateItem(item.id).subscribe(() => { this.snack.open('Item activated', 'Close', { duration: 2000 }); this.load(); });
   }
 
   remove(item: Item) {

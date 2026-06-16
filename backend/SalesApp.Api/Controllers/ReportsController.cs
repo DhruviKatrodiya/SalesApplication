@@ -25,7 +25,7 @@ public class ReportsController : OwnedControllerBase
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         var uid = CurrentUserId;
-        var query = _db.Orders.Where(o => o.SalesmanId == uid && o.OrderDate.Year == year);
+        var query = _db.Orders.Where(o => o.SalesmanId == uid && o.IsActive && o.OrderDate.Year == year);
         if (month is not null) query = query.Where(o => o.OrderDate.Month == month);
         var orders = await query.ToListAsync();
 
@@ -49,7 +49,7 @@ public class ReportsController : OwnedControllerBase
     {
         var uid = CurrentUserId;
         var orders = await _db.Orders
-            .Where(o => o.SalesmanId == uid && o.OrderDate.Year == year && o.OrderDate.Month == month)
+            .Where(o => o.SalesmanId == uid && o.IsActive && o.OrderDate.Year == year && o.OrderDate.Month == month)
             .ToListAsync();
 
         var rows = orders
@@ -69,7 +69,7 @@ public class ReportsController : OwnedControllerBase
         [FromQuery] int year, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         var uid = CurrentUserId;
-        var orders = await _db.Orders.Where(o => o.SalesmanId == uid && o.OrderDate.Year == year).ToListAsync();
+        var orders = await _db.Orders.Where(o => o.SalesmanId == uid && o.IsActive && o.OrderDate.Year == year).ToListAsync();
         var rows = orders
             .GroupBy(o => o.OrderDate.Month)
             .OrderBy(g => g.Key)
@@ -91,7 +91,7 @@ public class ReportsController : OwnedControllerBase
         var uid = CurrentUserId;
         var grouped = _db.Orders
             .Include(o => o.Customer)
-            .Where(o => o.SalesmanId == uid)
+            .Where(o => o.SalesmanId == uid && o.IsActive)
             .GroupBy(o => new { o.CustomerId, o.Customer!.Name })
             .Select(g => new
             {

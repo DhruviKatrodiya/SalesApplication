@@ -21,7 +21,7 @@
 
         <mat-form-field appearance="fill" class="f-date">
           <mat-label>Order Date</mat-label>
-          <input matInput [matDatepicker]="dp" [ngModel]="orderDateFilter()" (ngModelChange)="setOrderDateFilter($event)" />
+          <input matInput appDateInput [matDatepicker]="dp" [ngModel]="orderDateFilter()" (ngModelChange)="setOrderDateFilter($event)" placeholder="dd-mm-yyyy" />
           <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
           <mat-datepicker #dp></mat-datepicker>
         </mat-form-field>
@@ -29,7 +29,7 @@
         <mat-form-field appearance="fill" class="f-status">
           <mat-label>Delivery Status</mat-label>
           <mat-select [ngModel]="deliveryStatusFilter()" (ngModelChange)="setDeliveryStatusFilter($event)">
-            <mat-option [value]="null">All</mat-option>
+            <mat-option [value]="-1">All</mat-option>
             @for (s of statusOptions; track s.value) { <mat-option [value]="s.value">{{ s.label }}</mat-option> }
           </mat-select>
         </mat-form-field>
@@ -37,8 +37,17 @@
         <mat-form-field appearance="fill" class="f-status">
           <mat-label>Paid Status</mat-label>
           <mat-select [ngModel]="paidStatusFilter()" (ngModelChange)="setPaidStatusFilter($event)">
-            <mat-option [value]="null">All</mat-option>
+            <mat-option [value]="-1">All</mat-option>
             @for (p of paymentOptions; track p.value) { <mat-option [value]="p.value">{{ p.label }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="f-status">
+          <mat-label>Active</mat-label>
+          <mat-select [ngModel]="activeFilter()" (ngModelChange)="setActiveFilter($event)">
+            <mat-option value="all">All</mat-option>
+            <mat-option value="active">Active</mat-option>
+            <mat-option value="inactive">Inactive</mat-option>
           </mat-select>
         </mat-form-field>
 
@@ -47,6 +56,7 @@
         }
       </div>
 
+      <div class="table-scroll">
       <table mat-table [dataSource]="orders()">
         <ng-container matColumnDef="orderNumber">
           <th mat-header-cell *matHeaderCellDef>Order #</th>
@@ -82,13 +92,23 @@
           <th mat-header-cell *matHeaderCellDef>Remaining</th>
           <td mat-cell *matCellDef="let o">{{ o.remainingAmount | currency:'INR' }}</td>
         </ng-container>
+        <ng-container matColumnDef="active">
+          <th mat-header-cell *matHeaderCellDef>Active</th>
+          <td mat-cell *matCellDef="let o">
+            <span class="status-chip" [class.inactive]="!o.isActive">{{ o.isActive ? 'Active' : 'Inactive' }}</span>
+          </td>
+        </ng-container>
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let o">
             <button mat-icon-button matTooltip="Payments" (click)="managePayments(o)"><mat-icon>payments</mat-icon></button>
             <button mat-icon-button matTooltip="Items — mark received status" (click)="viewItems(o)"><mat-icon>checklist</mat-icon></button>
             <button mat-icon-button matTooltip="Edit order" [disabled]="isLocked(o)" (click)="edit(o)"><mat-icon>edit</mat-icon></button>
-            <button mat-icon-button matTooltip="Delete" (click)="remove(o)"><mat-icon>delete</mat-icon></button>
+            @if (o.isActive) {
+              <button mat-icon-button matTooltip="Delete" (click)="remove(o)"><mat-icon>delete</mat-icon></button>
+            } @else {
+              <button mat-icon-button matTooltip="Activate" (click)="activate(o)"><mat-icon>restore</mat-icon></button>
+            }
             <button mat-icon-button matTooltip="Download Invoice (PDF)" (click)="downloadInvoice(o)"><mat-icon>download</mat-icon></button>
           </td>
         </ng-container>
@@ -96,6 +116,7 @@
         <tr mat-header-row *matHeaderRowDef="columns"></tr>
         <tr mat-row *matRowDef="let row; columns: columns"></tr>
       </table>
+      </div>
       @if (!pager.total()) {
         @if (hasFilters()) {
           <div class="empty">No orders match the selected filters.</div>

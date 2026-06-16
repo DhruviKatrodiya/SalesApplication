@@ -37,7 +37,7 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Route</mat-label>
-          <mat-select formControlName="routeId" (opened)="onRouteSelectOpened()" (closed)="routeSearch.set('')">
+          <mat-select formControlName="routeId" required (opened)="onRouteSelectOpened()" (closed)="routeSearch.set('')">
             <div class="select-search">
               <mat-icon class="select-search-icon">search</mat-icon>
               <input #routeSearchInput type="text" class="select-search-input" placeholder="Search route…"
@@ -46,7 +46,6 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
                      (keydown)="$event.stopPropagation()"
                      (click)="$event.stopPropagation()" />
             </div>
-            <mat-option [value]="null">— None —</mat-option>
             @for (r of filteredRoutes(); track r.id) {
               <mat-option [value]="r.id">{{ r.name }}</mat-option>
             }
@@ -54,10 +53,12 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
               <div class="select-empty">No routes found</div>
             }
           </mat-select>
+          @if (form.controls.routeId.hasError('required')) { <mat-error>Route is required</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Address</mat-label>
-          <textarea matInput formControlName="address" rows="2"></textarea>
+          <textarea matInput formControlName="address" rows="2" required></textarea>
+          @if (form.controls.address.hasError('required')) { <mat-error>Address is required</mat-error> }
         </mat-form-field>
       </form>
     </mat-dialog-content>
@@ -117,8 +118,8 @@ export class CustomerDialog {
     name: [this.data.customer?.name ?? '', Validators.required],
     phone: [this.data.customer?.phone ?? '', [Validators.required, Validators.pattern(/^\d{7,15}$/)]],
     email: [this.data.customer?.email ?? '', [Validators.required, Validators.email]],
-    routeId: [this.data.customer?.routeId ?? null as number | null],
-    address: [this.data.customer?.address ?? '']
+    routeId: [this.data.customer?.routeId ?? null as number | null, Validators.required],
+    address: [this.data.customer?.address ?? '', Validators.required]
   });
 
   save() {

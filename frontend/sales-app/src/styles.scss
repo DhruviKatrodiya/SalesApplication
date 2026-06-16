@@ -83,8 +83,15 @@ input[type="number"]::-webkit-inner-spin-button {
 .form-card { max-width: 520px; }
 .form-card form { display: flex; flex-direction: column; }
 
-.table-card { overflow: auto; }
+/* The card itself never scrolls; each table scrolls inside its own wrapper
+   (.table-scroll) so the filters and paginator stay fixed and don't drift
+   when a wide table is scrolled horizontally. */
+.table-card { overflow: hidden; }
 table.mat-mdc-table { width: 100%; }
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 .cards-grid {
   display: grid;
@@ -121,9 +128,66 @@ table.mat-mdc-table { width: 100%; }
   color: var(--mat-sys-on-surface-variant);
 }
 
+/* ---- Active/Inactive status badge (soft-delete state) ---- */
+.status-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  background: #e6f4ea;
+  color: #1e7e34;
+}
+.status-chip.inactive {
+  background: #fdecea;
+  color: #c62828;
+}
+
 /* Keep multiple form-field suffix icons (e.g. a datepicker toggle + a clear button)
    on a single row instead of stacking them vertically. */
 .mat-mdc-form-field-icon-suffix { display: inline-flex; align-items: center; }
+
+/* ---- Searchable mat-select dropdowns (the in-panel "Search…" pattern) ---- */
+.mat-mdc-select-panel {
+  overflow-x: hidden;          /* no stray horizontal scrollbar */
+  padding-top: 0 !important;   /* remove the gap that let options peek above the sticky search */
+}
+/* Long option text (e.g. "GJ-03-GD-4595 (10 units)") wraps cleanly instead of being cramped/clipped. */
+.mat-mdc-select-panel .mat-mdc-option {
+  white-space: normal;
+  line-height: 1.35;
+  min-height: 44px;
+  height: auto;
+}
+/* Sticky search header: icon + input on one row, solid opaque background above the scrolling options. */
+.select-search {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container-high);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  box-sizing: border-box;
+}
+.select-search-icon { color: var(--mat-sys-on-surface-variant); }
+.select-search-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+  font: inherit;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface);
+  outline: none;
+}
+.select-search-input:focus { border-color: var(--mat-sys-primary); }
+.select-empty { padding: 12px 16px; color: var(--mat-sys-on-surface-variant); }
 
 /* Lay action-column buttons (View / Edit / Delete …) out horizontally in every table. */
 .mat-mdc-table td.mat-column-actions {
@@ -138,18 +202,9 @@ table.mat-mdc-table { width: 100%; }
   /* Make the primary page action (e.g. "New Order") span the row on phones. */
   .page-header > button { width: 100%; }
 
-  /* Only the table itself scrolls horizontally, so the card, filters and
-     paginator on the left stay fixed and don't drift while the table is scrolled. */
-  .table-card .mat-mdc-card-content,
-  .mat-mdc-card-content:has(table.mat-mdc-table) {
-    overflow-x: clip;
-  }
-  table.mat-mdc-table {
-    display: block;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    white-space: nowrap;
-  }
+  /* Table horizontal scroll + fixed filters is handled globally above;
+     on phones also keep cell content on a single line. */
+  table.mat-mdc-table { white-space: nowrap; }
 
   /* Stack filter / search controls full width so they're tappable. */
   .filters > *,

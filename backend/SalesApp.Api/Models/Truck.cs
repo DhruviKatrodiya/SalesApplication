@@ -7,6 +7,7 @@ public class Truck
     public int UserId { get; set; }   // owning salesperson
     public string Name { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsActive { get; set; } = true;
 
     public ICollection<TruckStock> Stock { get; set; } = new List<TruckStock>();
 }
