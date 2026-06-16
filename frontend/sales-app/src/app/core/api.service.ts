@@ -6,7 +6,7 @@ import {
   Category, SubCategory, Item, Customer, CustomerSearchResult, CustomerAdvance,
   Order, OrderStatus, Payment, Dispatch, ReceivedStatus,
   ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment, StockRequestAdvance,
-  Truck, TruckStockItem, ItemPriceHistory
+  Truck, TruckStockItem, ItemPriceHistory, InventoryMovement
 } from './models';
 
 @Injectable({ providedIn: 'root' })
@@ -82,6 +82,7 @@ export class ApiService {
   updateItem(id: number, b: any) { return this.http.put<Item>(`${this.base}/items/${id}`, b); }
   deleteItem(id: number) { return this.http.delete(`${this.base}/items/${id}`); }
   getItemPriceHistory(id: number) { return this.http.get<ItemPriceHistory>(`${this.base}/items/${id}/price-history`); }
+  getItemMovements(id: number) { return this.http.get<InventoryMovement[]>(`${this.base}/items/${id}/movements`); }
 
   // ---- Dispatch ----
   getDispatches(opts?: { truck?: string; date?: string; page?: number; pageSize?: number }) {
@@ -142,11 +143,17 @@ export class ApiService {
   deleteCustomer(id: number) { return this.http.delete(`${this.base}/customers/${id}`); }
 
   // ---- Trucks ----
-  getTrucks(opts?: { search?: string; withStock?: boolean }) {
+  getTrucks(opts?: { search?: string; withStock?: boolean; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.search) p = p.set('search', opts.search);
     if (opts?.withStock) p = p.set('withStock', true);
-    return this.http.get<Truck[]>(`${this.base}/trucks`, { params: p });
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<Truck>>(`${this.base}/trucks`, { params: p });
+  }
+  /** Full truck list (e.g. order/dispatch dropdowns), independent of table paging. */
+  getAllTrucks(opts?: { search?: string; withStock?: boolean }) {
+    return this.getTrucks({ ...opts, page: 1, pageSize: 1000 }).pipe(map(r => r.items));
   }
   getTruckStock(truckId: number) { return this.http.get<TruckStockItem[]>(`${this.base}/trucks/${truckId}/stock`); }
   createTruck(name: string) { return this.http.post<Truck>(`${this.base}/trucks`, { name }); }

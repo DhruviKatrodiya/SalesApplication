@@ -19,7 +19,8 @@ namespace SalesApp.Api.Controllers;
 public class StockRequestsController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public StockRequestsController(AppDbContext db) => _db = db;
+    private readonly InventoryService _inv;
+    public StockRequestsController(AppDbContext db, InventoryService inv) { _db = db; _inv = inv; }
 
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
@@ -192,30 +193,11 @@ public class StockRequestsController : ControllerBase
 
         var itemIds = request.Items.Select(i => i.ItemId).ToList();
         var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
-        var batchedItemIds = await _db.InventoryBatches.Where(b => itemIds.Contains(b.ItemId))
-            .Select(b => b.ItemId).Distinct().ToListAsync();
         foreach (var line in request.Items)
         {
             if (!items.TryGetValue(line.ItemId, out var item)) continue;
-
-            // Pre-existing stock with no batch yet -> capture it as an opening batch at the current price,
-            // so old stock keeps its old price instead of being lumped in with the new price.
-            if (!batchedItemIds.Contains(item.Id) && item.StockQuantity > 0)
-            {
-                _db.InventoryBatches.Add(new InventoryBatch
-                {
-                    UserId = item.UserId, ItemId = item.Id, Quantity = item.StockQuantity, PurchasePrice = item.UnitPrice
-                });
-                batchedItemIds.Add(item.Id);
-            }
-
-            // New received stock keeps its own purchase price (does not overwrite older batches).
-            _db.InventoryBatches.Add(new InventoryBatch
-            {
-                UserId = item.UserId, ItemId = item.Id, Quantity = line.Quantity,
-                PurchasePrice = line.UnitPrice, StockRequestId = request.Id
-            });
-            item.StockQuantity += line.Quantity;   // requested stock received -> restock inventory
+            // Received stock becomes its own price-tagged FIFO batch (does not merge with older batches).
+            await _inv.ReceiveAsync(item, line.Quantity, line.UnitPrice, "Fulfill", request.Id, request.RequestNumber);
             item.UnitPrice = line.UnitPrice;       // display the latest price (history preserved in batches)
         }
 
@@ -252,18 +234,19 @@ public class StockRequestsController : ControllerBase
         if (request.Status == StockRequestStatus.Cancelled || request.Status == StockRequestStatus.Done)
             return BadRequest(new MessageResponse("This request can no longer be cancelled."));
 
-        // If it was already fulfilled, return the stock it added back out of inventory
-        // and remove the batches this request created (keep price history consistent).
+        // If it was already fulfilled, remove the batches this request created and take only their
+        // still-remaining quantity back out of stock (any already-consumed units stay accounted for).
         if (request.Status == StockRequestStatus.Fulfilled)
         {
             var itemIds = request.Items.Select(i => i.ItemId).ToList();
             var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
-            foreach (var line in request.Items)
-                if (items.TryGetValue(line.ItemId, out var item))
-                    item.StockQuantity -= line.Quantity;
-
             var batches = await _db.InventoryBatches.Where(b => b.StockRequestId == id).ToListAsync();
-            _db.InventoryBatches.RemoveRange(batches);
+            foreach (var batch in batches)
+            {
+                if (items.TryGetValue(batch.ItemId, out var item))
+                    item.StockQuantity -= batch.Quantity;   // remaining only
+                batch.Quantity = 0;   // deplete (keep batch for audit; movements reference it)
+            }
         }
 
         request.Status = StockRequestStatus.Cancelled;

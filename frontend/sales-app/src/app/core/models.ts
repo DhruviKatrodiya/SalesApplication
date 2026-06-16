@@ -40,11 +40,15 @@ export interface Item {
   id: number; subCategoryId: number; subCategoryName: string; categoryName: string;
   name: string; sku?: string; unit?: string; stockQuantity: number; dispatchStock: number; unitPrice: number;
 }
-export interface InventoryBatch { id: number; quantity: number; purchasePrice: number; createdAt: string; sourceRequestNumber?: string | null; }
+export interface InventoryBatch { id: number; received: number; remaining: number; purchasePrice: number; createdAt: string; sourceRequestNumber?: string | null; }
 export interface ItemPriceHistory {
   itemId: number; name: string; stockQuantity: number;
   oldestPrice: number; latestPrice: number; avgCost: number; stockValue: number;
   batches: InventoryBatch[];
+}
+export interface InventoryMovement {
+  id: number; type: string; quantity: number; unitCost: number; totalCost: number;
+  refType: string; source?: string | null; reversed: boolean; createdAt: string;
 }
 
 // ---- Stock requests ("My Orders") ----

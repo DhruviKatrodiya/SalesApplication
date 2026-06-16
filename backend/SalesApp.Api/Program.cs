@@ -25,6 +25,7 @@ builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<OtpService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
+builder.Services.AddScoped<InventoryService>();
 
 // ---- Auth ----
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

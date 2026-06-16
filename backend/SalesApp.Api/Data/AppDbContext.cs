@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<Truck> Trucks => Set<Truck>();
     public DbSet<TruckStock> TruckStocks => Set<TruckStock>();
     public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
+    public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
     public DbSet<DispatchDraft> DispatchDrafts => Set<DispatchDraft>();
@@ -90,6 +91,20 @@ public class AppDbContext : DbContext
         b.Entity<InventoryBatch>()
             .HasOne(x => x.StockRequest).WithMany()
             .HasForeignKey(x => x.StockRequestId).OnDelete(DeleteBehavior.SetNull);
+
+        // Inventory movement ledger (audit).
+        b.Entity<InventoryTransaction>().Property(x => x.UnitCost).HasPrecision(18, 2);
+        b.Entity<InventoryTransaction>().Property(x => x.TotalCost).HasPrecision(18, 2);
+        b.Entity<InventoryTransaction>().HasIndex(x => new { x.ItemId, x.CreatedAt });
+        b.Entity<InventoryTransaction>().HasIndex(x => new { x.RefType, x.RefId });
+        // NoAction on both FKs to avoid SQL Server multiple-cascade-path cycles
+        // (Item -> Batch -> Transaction and Item -> Transaction). Cleanup is done in code on item delete.
+        b.Entity<InventoryTransaction>()
+            .HasOne(x => x.Item).WithMany()
+            .HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.NoAction);
+        b.Entity<InventoryTransaction>()
+            .HasOne(x => x.Batch).WithMany()
+            .HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.NoAction);
 
         // A customer optionally belongs to a delivery route; deleting a route
         // just unassigns its customers (sets RouteId to null).

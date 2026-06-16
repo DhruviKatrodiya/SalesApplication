@@ -24,11 +24,15 @@ public record ItemDto(
     string Name, string? Sku, string? Unit, int StockQuantity, int DispatchStock, decimal UnitPrice);
 
 // Inventory batches (purchase-price history)
-public record InventoryBatchDto(int Id, int Quantity, decimal PurchasePrice, DateTime CreatedAt, string? SourceRequestNumber);
+public record InventoryBatchDto(int Id, int Received, int Remaining, decimal PurchasePrice, DateTime CreatedAt, string? SourceRequestNumber);
 public record ItemPriceHistoryDto(
     int ItemId, string Name, int StockQuantity,
     decimal OldestPrice, decimal LatestPrice, decimal AvgCost, decimal StockValue,
     List<InventoryBatchDto> Batches);
+// Inventory movement ledger entry (audit)
+public record InventoryMovementDto(
+    int Id, string Type, int Quantity, decimal UnitCost, decimal TotalCost,
+    string RefType, string? Source, bool Reversed, DateTime CreatedAt);
 
 // Stock requests ("My Orders") — a salesperson's request for inventory / low-stock items
 public record StockRequestItemRequest(int ItemId, int Quantity, decimal? UnitPrice);

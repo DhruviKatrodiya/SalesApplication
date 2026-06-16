@@ -19,10 +19,15 @@ public class TrucksController : ControllerBase
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
-    /// <summary>All trucks for the current user, with a quick stock summary.</summary>
+    /// <summary>Trucks for the current user (paged), with a quick stock summary.</summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<TruckDto>>> GetAll([FromQuery] string? search, [FromQuery] bool withStock = false)
+    public async Task<ActionResult<PagedResult<TruckDto>>> GetAll(
+        [FromQuery] string? search, [FromQuery] bool withStock = false,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         var uid = CurrentUserId;
         var q = _db.Trucks.Include(t => t.Stock).Where(t => t.UserId == uid);
         if (!string.IsNullOrWhiteSpace(search))
@@ -30,19 +35,15 @@ public class TrucksController : ControllerBase
             var term = search.Trim();
             q = q.Where(t => t.Name.Contains(term));
         }
-        var trucks = await q.OrderBy(t => t.Name).ToListAsync();
-        var list = trucks
-            .Select(t => new
-            {
-                Truck = t,
-                Units = t.Stock.Sum(s => s.Quantity),
-                Lines = t.Stock.Count(s => s.Quantity > 0)
-            })
+        var all = (await q.OrderBy(t => t.Name).ToListAsync())
+            .Select(t => new TruckDto(t.Id, t.Name, t.CreatedAt, t.Stock.Count(s => s.Quantity > 0), t.Stock.Sum(s => s.Quantity)))
             // When the picker only wants stocked trucks, hide empty ones.
-            .Where(x => !withStock || x.Units > 0)
-            .Select(x => new TruckDto(x.Truck.Id, x.Truck.Name, x.Truck.CreatedAt, x.Lines, x.Units))
+            .Where(x => !withStock || x.TotalUnits > 0)
             .ToList();
-        return Ok(list);
+
+        var total = all.Count;
+        var items = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Ok(new PagedResult<TruckDto>(items, total, page, pageSize));
     }
 
     /// <summary>A truck's current stock — the items (with quantities) available to order from it.</summary>

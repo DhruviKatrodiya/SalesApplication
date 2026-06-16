@@ -91,9 +91,17 @@ public class ItemsController : OwnedControllerBase
         // Opening-stock batch so price history & valuation are complete from the start.
         if (i.StockQuantity > 0)
         {
-            _db.InventoryBatches.Add(new InventoryBatch
+            var ob = new InventoryBatch
             {
-                UserId = uid, ItemId = i.Id, Quantity = i.StockQuantity, PurchasePrice = i.UnitPrice
+                UserId = uid, ItemId = i.Id, InitialQuantity = i.StockQuantity, Quantity = i.StockQuantity, PurchasePrice = i.UnitPrice
+            };
+            _db.InventoryBatches.Add(ob);
+            await _db.SaveChangesAsync();
+            _db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                UserId = uid, ItemId = i.Id, BatchId = ob.Id, Type = InventoryTxnType.In,
+                Quantity = i.StockQuantity, UnitCost = i.UnitPrice, TotalCost = i.StockQuantity * i.UnitPrice,
+                RefType = "Opening", Source = "Opening stock"
             });
             await _db.SaveChangesAsync();
         }
@@ -111,20 +119,36 @@ public class ItemsController : OwnedControllerBase
         var batches = await _db.InventoryBatches
             .Where(b => b.ItemId == id)
             .OrderByDescending(b => b.CreatedAt).ThenByDescending(b => b.Id)
-            .Select(b => new InventoryBatchDto(b.Id, b.Quantity, b.PurchasePrice, b.CreatedAt,
+            .Select(b => new InventoryBatchDto(b.Id, b.InitialQuantity, b.Quantity, b.PurchasePrice, b.CreatedAt,
                 b.StockRequest != null ? b.StockRequest.RequestNumber : null))
             .ToListAsync();
 
-        var receivedQty = batches.Sum(b => b.Quantity);
-        var receivedValue = batches.Sum(b => b.Quantity * b.PurchasePrice);
-        // Weighted-average cost across receipts; exact FIFO valuation arrives with consumption tracking (next phase).
-        var avgCost = receivedQty > 0 ? receivedValue / receivedQty : item.UnitPrice;
+        // Exact FIFO valuation from the remaining quantity in each batch.
+        var remainingQty = batches.Sum(b => b.Remaining);
+        var batchValue = batches.Sum(b => b.Remaining * b.PurchasePrice);
+        // Any stock not yet represented by a batch (untouched legacy stock) is valued at the item price.
+        var unbatched = Math.Max(0, item.StockQuantity - remainingQty);
+        var stockValue = decimal.Round(batchValue + unbatched * item.UnitPrice, 2);
+        var avgCost = item.StockQuantity > 0 ? decimal.Round(stockValue / item.StockQuantity, 2) : item.UnitPrice;
         var oldest = batches.Count > 0 ? batches[^1].PurchasePrice : item.UnitPrice;
         var latest = batches.Count > 0 ? batches[0].PurchasePrice : item.UnitPrice;
-        var stockValue = decimal.Round(item.StockQuantity * avgCost, 2);
 
         return Ok(new ItemPriceHistoryDto(item.Id, item.Name, item.StockQuantity,
-            oldest, latest, decimal.Round(avgCost, 2), stockValue, batches));
+            oldest, latest, avgCost, stockValue, batches));
+    }
+
+    /// <summary>Inventory movement ledger for an item (receipts and FIFO consumption) — audit trail.</summary>
+    [HttpGet("{id:int}/movements")]
+    public async Task<ActionResult<IEnumerable<InventoryMovementDto>>> Movements(int id)
+    {
+        if (!await _db.Items.AnyAsync(x => x.Id == id && x.UserId == CurrentUserId)) return NotFound();
+        var list = await _db.InventoryTransactions
+            .Where(t => t.ItemId == id)
+            .OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id)
+            .Select(t => new InventoryMovementDto(t.Id, t.Type == InventoryTxnType.In ? "IN" : "OUT",
+                t.Quantity, t.UnitCost, t.TotalCost, t.RefType, t.Source, t.Reversed, t.CreatedAt))
+            .ToListAsync();
+        return Ok(list);
     }
 
     [HttpPut("{id:int}")]
@@ -151,6 +175,10 @@ public class ItemsController : OwnedControllerBase
     {
         var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (i is null) return NotFound();
+        // Inventory movements have no cascade delete (NoAction) — clear them first; batches cascade.
+        var txns = await _db.InventoryTransactions.Where(t => t.ItemId == id).ToListAsync();
+        _db.InventoryTransactions.RemoveRange(txns);
+        await _db.SaveChangesAsync();
         _db.Items.Remove(i);
         await _db.SaveChangesAsync();
         return NoContent();

@@ -15,7 +15,8 @@ namespace SalesApp.Api.Controllers;
 public class DispatchController : ControllerBase
 {
     private readonly AppDbContext _db;
-    public DispatchController(AppDbContext db) => _db = db;
+    private readonly Services.InventoryService _inv;
+    public DispatchController(AppDbContext db, Services.InventoryService inv) { _db = db; _inv = inv; }
 
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
@@ -141,7 +142,8 @@ public class DispatchController : ControllerBase
         foreach (var line in req.Items)
         {
             var item = items[line.ItemId];
-            item.StockQuantity -= line.Quantity;    // leaves the godown
+            // FIFO-consume the godown stock (oldest batch first) and log the movement + COGS.
+            await _inv.ConsumeFifoAsync(item, line.Quantity, "Dispatch", null, truck);
             item.DispatchStock += line.Quantity;    // ...and is loaded onto the truck (aggregate, all trucks)
 
             // Add to this specific truck's own stock ledger.

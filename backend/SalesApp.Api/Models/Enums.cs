@@ -24,6 +24,13 @@ public enum ReceivedStatus
     Completed = 2
 }
 
+/// <summary>Direction of an inventory stock movement.</summary>
+public enum InventoryTxnType
+{
+    In = 0,    // stock received (a batch is created)
+    Out = 1    // stock consumed (FIFO from batches)
+}
+
 /// <summary>How an order's stock is fulfilled when it is created.</summary>
 public enum OrderSource
 {

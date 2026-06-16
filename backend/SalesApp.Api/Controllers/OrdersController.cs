@@ -17,12 +17,14 @@ public class OrdersController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IInvoiceService _invoices;
     private readonly IEmailService _email;
+    private readonly InventoryService _inv;
     private readonly ILogger<OrdersController> _logger;
-    public OrdersController(AppDbContext db, IInvoiceService invoices, IEmailService email, ILogger<OrdersController> logger)
+    public OrdersController(AppDbContext db, IInvoiceService invoices, IEmailService email, InventoryService inv, ILogger<OrdersController> logger)
     {
         _db = db;
         _invoices = invoices;
         _email = email;
+        _inv = inv;
         _logger = logger;
     }
 
@@ -158,8 +160,8 @@ public class OrdersController : ControllerBase
             });
         }
 
-        // Decrement the correct bucket: Inventory -> godown stock; Dispatch -> the truck's stock
-        // (and keep the item's aggregate dispatch stock in sync for display).
+        // Dispatch -> deduct the truck's stock now. Inventory -> consumed via FIFO after the order is
+        // saved (needs the order id for the movement ledger / reversal on edit).
         foreach (var line in req.Items)
         {
             var item = items[line.ItemId];
@@ -168,7 +170,6 @@ public class OrdersController : ControllerBase
                 truckStock[line.ItemId].Quantity -= line.Quantity;
                 item.DispatchStock -= line.Quantity;
             }
-            else item.StockQuantity -= line.Quantity;
         }
 
         order.TotalAmount = order.Items.Sum(i => i.LineTotal);
@@ -180,6 +181,10 @@ public class OrdersController : ControllerBase
 
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
+
+        if (source == OrderSource.Inventory)
+            foreach (var line in req.Items)
+                await _inv.ConsumeFifoAsync(items[line.ItemId], line.Quantity, "Order", order.Id, order.OrderNumber);
 
         var saved = await WithIncludes().FirstAsync(o => o.Id == order.Id);
         return CreatedAtAction(nameof(Get), new { id = order.Id }, Mappers.ToDto(saved));
@@ -230,16 +235,16 @@ public class OrdersController : ControllerBase
         }
 
         // 1) Return the original quantities to the order's CURRENT (old) source bucket / truck.
-        foreach (var ol in oldLines)
-        {
-            if (!items.TryGetValue(ol.ItemId, out var it)) continue;
-            if (order.Source == OrderSource.Dispatch)
+        //    Inventory: reverse the FIFO consumption (restores the exact batches). Dispatch: restore truck.
+        if (order.Source == OrderSource.Inventory)
+            await _inv.ReverseAsync("Order", order.Id);
+        else
+            foreach (var ol in oldLines)
             {
+                if (!items.TryGetValue(ol.ItemId, out var it)) continue;
                 if (oldTruck is not null) Row(oldTruck, ol.ItemId).Quantity += ol.Quantity;
                 it.DispatchStock += ol.Quantity;
             }
-            else it.StockQuantity += ol.Quantity;
-        }
 
         // 2) Validate the new lines against the NEW source bucket / truck (post-restore availability).
         //    On failure we return before SaveChanges, so the in-memory restore is never persisted.
@@ -274,12 +279,12 @@ public class OrdersController : ControllerBase
         foreach (var line in req.Items)
         {
             var item = items[line.ItemId];
+            // Dispatch deducts the truck now; inventory is FIFO-consumed after save.
             if (newSource == OrderSource.Dispatch)
             {
                 Row(newTruck!, line.ItemId).Quantity -= line.Quantity;
                 item.DispatchStock -= line.Quantity;
             }
-            else item.StockQuantity -= line.Quantity;
 
             var unitPrice = line.UnitPrice ?? item.UnitPrice;
             order.Items.Add(new OrderItem
@@ -296,6 +301,11 @@ public class OrdersController : ControllerBase
         OrderMath.Recalculate(order);
 
         await _db.SaveChangesAsync();
+
+        if (newSource == OrderSource.Inventory)
+            foreach (var line in req.Items)
+                await _inv.ConsumeFifoAsync(items[line.ItemId], line.Quantity, "Order", order.Id, order.OrderNumber);
+
         var saved = await WithIncludes().FirstAsync(o => o.Id == order.Id);
         return Ok(Mappers.ToDto(saved));
     }

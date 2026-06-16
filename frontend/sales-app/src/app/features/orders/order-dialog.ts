@@ -124,7 +124,7 @@ export class OrderDialog implements OnInit {
   }
 
   private loadTrucks() {
-    this.api.getTrucks({ withStock: true }).subscribe(list => this.trucks.set(list));
+    this.api.getAllTrucks({ withStock: true }).subscribe(list => this.trucks.set(list));
   }
 
   private loadTruckStock(truckId: number) {

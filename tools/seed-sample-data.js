@@ -1,17 +1,25 @@
-/*
- * Sample data seeder — 50 records per module for the current year (2026),
- * for testing and reporting. Calls the running Web API so all business rules
- * (totals, payment status, stock, order numbers) are applied.
- *
- * Usage:  node tools/seed-sample-data.js
- * Requires the API running on http://localhost:5219.
- */
-
+// Seeds 20 realistic sample records per module via the running API.
+// Usage:  node tools/seed-sample-data.js [userId]
+//   Mints a JWT with the app's own signing key (appsettings) for the given user id (default 1),
+//   so the data is owned by that account without needing its password.
+const fs = require('fs');
+const crypto = require('crypto');
+const USER_ID = Number(process.argv[2]) || Number(process.env.SEED_USER_ID) || 1;
 const BASE = process.env.API_BASE || 'http://localhost:5219/api';
-const EMAIL = process.env.SEED_EMAIL || 'dhruvikatrodiya01@gmail.com';
-const PASSWORD = process.env.SEED_PASSWORD || 'Sales@123';
-const YEAR = 2026;
-const N = 50;
+
+function b64url(s) { return Buffer.from(s).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_'); }
+function mintToken(userId) {
+  const cfg = JSON.parse(fs.readFileSync('backend/SalesApp.Api/appsettings.json', 'utf8')).Jwt;
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(JSON.stringify({
+    sub: String(userId), nameid: String(userId),
+    'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier': String(userId),
+    iss: cfg.Issuer, aud: cfg.Audience, iat: now, exp: now + 3600, jti: crypto.randomUUID(),
+  }));
+  const sig = b64url(crypto.createHmac('sha256', cfg.Key).update(`${header}.${payload}`).digest());
+  return `${header}.${payload}.${sig}`;
+}
 
 let token = '';
 async function api(method, path, body) {
@@ -23,157 +31,121 @@ async function api(method, path, body) {
   if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${await res.text()}`);
   return res.status === 204 ? null : res.json();
 }
-// PagedResult-aware GET (returns the items array).
-const items = (r) => (Array.isArray(r) ? r : r.items);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const rint = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-const pick = (arr) => arr[rand(0, arr.length - 1)];
-const pad = (n, w = 3) => String(n).padStart(w, '0');
+// ---- realistic reference data (20 each) ----
+const ROUTES = ['Andheri East', 'Bandra West', 'Borivali', 'Dadar', 'Thane', 'Navi Mumbai', 'Powai', 'Malad',
+  'Goregaon', 'Kurla', 'Chembur', 'Vashi', 'Mulund', 'Ghatkopar', 'Sion', 'Worli', 'Colaba', 'Juhu', 'Versova', 'Kandivali'];
 
-/** A date spread across the current year (for monthly/daily reports). */
-function dateInYear() {
-  const month = rand(1, 12);
-  const day = rand(1, 28);
-  return `${YEAR}-${pad(month, 2)}-${pad(day, 2)}`;
-}
+// [category, sub-category, item, unit, price]
+const CATALOG = [
+  ['Beverages', 'Soft Drinks', 'Coca-Cola 750ml', 'pcs', 40],
+  ['Snacks', 'Chips', "Lay's Classic 52g", 'pcs', 20],
+  ['Dairy', 'Milk & Curd', 'Amul Gold Milk 1L', 'pcs', 66],
+  ['Bakery', 'Bread', 'Britannia Brown Bread', 'pcs', 45],
+  ['Staples', 'Atta & Flour', 'Aashirvaad Atta 5kg', 'bag', 270],
+  ['Pulses', 'Dal', 'Toor Dal 1kg', 'kg', 140],
+  ['Grains', 'Rice', 'India Gate Basmati 5kg', 'bag', 650],
+  ['Cooking Oils', 'Edible Oil', 'Fortune Sunflower Oil 1L', 'pcs', 150],
+  ['Spices', 'Ground Spices', 'Everest Turmeric 200g', 'pcs', 60],
+  ['Tea & Coffee', 'Tea', 'Tata Tea Gold 500g', 'pcs', 260],
+  ['Confectionery', 'Biscuits', 'Parle-G 800g', 'pcs', 80],
+  ['Personal Care', 'Bath Soap', 'Dove Soap 100g', 'pcs', 55],
+  ['Home Care', 'Detergent', 'Surf Excel 1kg', 'pcs', 130],
+  ['Cleaning Supplies', 'Floor Cleaner', 'Lizol 975ml', 'pcs', 185],
+  ['Frozen Foods', 'Frozen Snacks', 'McCain French Fries 420g', 'pack', 99],
+  ['Baby Care', 'Diapers', 'Pampers M 32s', 'pack', 599],
+  ['Health & Wellness', 'Health Drinks', 'Horlicks 500g', 'pcs', 245],
+  ['Stationery', 'Notebooks', 'Classmate Notebook 180pg', 'pcs', 50],
+  ['Pet Care', 'Dog Food', 'Pedigree Adult 1.2kg', 'pack', 260],
+  ['Packaged Foods', 'Instant Noodles', 'Maggi Masala 12-pack', 'pack', 168],
+];
 
-const CAT_BASE = ['Beverages', 'Snacks', 'Dairy', 'Bakery', 'Grains', 'Spices', 'Frozen', 'Cleaning',
-  'Personal Care', 'Stationery', 'Cooking Oils', 'Confectionery', 'Health', 'Baby Care', 'Pet Supplies',
-  'Home Care', 'Tea & Coffee', 'Canned', 'Sauces', 'Dry Fruits'];
-const SUB_BASE = ['General', 'Premium', 'Economy', 'Bulk', 'Retail', 'Imported', 'Local', 'Organic'];
-const ITEM_BASE = ['Mango Juice', 'Orange Soda', 'Potato Chips', 'Cream Biscuits', 'Toned Milk', 'Cheddar',
-  'Wheat Bread', 'Butter Cookies', 'Basmati Rice', 'Toor Dal', 'Black Pepper', 'Garam Masala', 'Frozen Peas',
-  'Ice Cream', 'Detergent', 'Floor Cleaner', 'Bath Soap', 'Shampoo', 'Notebook', 'Gel Pen'];
-const UNITS = ['pcs', 'box', 'kg', 'pack', 'litre', 'dozen'];
-const FIRST = ['Aarav', 'Vivaan', 'Diya', 'Ananya', 'Kabir', 'Ishaan', 'Riya', 'Aditya', 'Meera', 'Rohan',
-  'Sneha', 'Arjun', 'Pooja', 'Karan', 'Nisha', 'Manoj', 'Priya', 'Rahul', 'Sunita', 'Vikram'];
-const LAST = ['Traders', 'Stores', 'Enterprises', 'Mart', 'Distributors', 'Agencies', 'Brothers', 'Suppliers'];
-const CITIES = ['MG Road', 'Market Street', 'Station Road', 'Gandhi Nagar', 'Ring Road', 'Civil Lines'];
-const METHODS = ['Cash', 'UPI', 'Bank', 'Cheque'];
-const ROUTE_AREAS = ['North', 'South', 'East', 'West', 'Central', 'Uptown', 'Downtown', 'Riverside', 'Hillside', 'Lakeview'];
+const CUSTOMERS = ['Sharma General Store', 'Gupta Provision Mart', 'Annapurna Kirana', 'Krishna Super Market',
+  'Patel Wholesale', 'Reliance Fresh Corner', 'Maa Vaishno Stores', 'Sai Traders', 'New Bombay Mart',
+  'Sri Balaji Stores', 'Janta Kirana', 'Bhavani Provisions', 'Royal Departmental', 'Galaxy Super Bazaar',
+  'Green Valley Grocers', 'Anand General Store', 'Lakshmi Stores', 'Metro Cash & Carry', 'Daily Needs Mart', 'Sunrise Provisions'];
 
-(async () => {
-  console.log(`Seeding ${N} records/module for ${YEAR}...\nLogging in as ${EMAIL}...`);
-  token = (await api('POST', '/auth/login', { email: EMAIL, password: PASSWORD })).token;
-  console.log('OK\n');
+const ORDER_NOTES = ['Monthly restock', 'Weekly order', 'Festival stock', 'Urgent delivery', 'Regular supply', 'Bulk order'];
+const REQ_NOTES = ['Low stock refill', 'New product line', 'Replenishment', 'Seasonal demand', 'Fast-moving items'];
+const DISPATCH_NOTES = ['Morning route delivery', 'Truck loaded for east zone', 'Daily dispatch', 'Priority delivery'];
 
-  // 1) Routes
+async function main() {
+  console.log(`Seeding realistic data on ${BASE} for user id ${USER_ID} ...`);
+  token = mintToken(USER_ID);
+
   const routes = [];
-  for (let i = 0; i < N; i++)
-    routes.push(await api('POST', '/routes', { name: `${ROUTE_AREAS[i % ROUTE_AREAS.length]} Route ${i + 1}`, description: `Delivery route ${i + 1}` }));
-  console.log(`Routes: ${routes.length}`);
+  for (const r of ROUTES) routes.push(await api('POST', '/routes', { name: `${r} Route`, description: `${r} delivery zone` }));
+  console.log(`✓ ${routes.length} routes`);
 
-  // 2) Categories
-  const categories = [];
-  for (let i = 0; i < N; i++)
-    categories.push(await api('POST', '/categories', { name: `${CAT_BASE[i % CAT_BASE.length]} ${i + 1}`, description: `Category ${i + 1}` }));
-  console.log(`Categories: ${categories.length}`);
-
-  // 3) Sub-categories (one per category)
-  const subCategories = [];
-  for (let i = 0; i < N; i++) {
-    const cat = categories[i];
-    subCategories.push(await api('POST', '/subcategories', { categoryId: cat.id, name: `${SUB_BASE[i % SUB_BASE.length]} ${i + 1}`, description: `Sub ${i + 1}` }));
-  }
-  console.log(`Sub-categories: ${subCategories.length}`);
-
-  // 4) Items (high stock so orders/dispatches don't run out)
-  const inv = [];
-  for (let i = 0; i < N; i++) {
-    inv.push(await api('POST', '/items', {
-      subCategoryId: pick(subCategories).id,
-      name: `${ITEM_BASE[i % ITEM_BASE.length]} ${i + 1}`,
-      sku: `SKU-${pad(i + 1)}`,
-      unit: pick(UNITS),
-      stockQuantity: rand(2000, 6000),
-      unitPrice: rand(20, 1200),
-    }));
-  }
-  console.log(`Items: ${inv.length}`);
-
-  // 5) Customers (phone required; some assigned to a route)
-  const customers = [];
-  for (let i = 0; i < N; i++) {
-    customers.push(await api('POST', '/customers', {
-      name: `${FIRST[i % FIRST.length]} ${pick(LAST)} ${i + 1}`,
-      phone: `9${rand(100000000, 999999999)}`,
-      email: `cust${i + 1}@example.com`,
-      address: `${rand(1, 200)}, ${pick(CITIES)}`,
-      routeId: Math.random() > 0.3 ? pick(routes).id : null,
-    }));
-  }
-  console.log(`Customers: ${customers.length}`);
-
-  // 6) Orders (dates across the year; varied status + payments for reporting)
-  const statuses = [1, 2, 3]; // Dispatched, Delivered, Completed
-  let paid = 0;
-  for (let i = 0; i < N; i++) {
-    const used = new Set();
-    const lines = [];
-    for (let j = 0; j < rand(1, 4); j++) {
-      const it = pick(inv);
-      if (used.has(it.id)) continue;
-      used.add(it.id);
-      lines.push({ itemId: it.id, quantity: rand(1, 8), unitPrice: it.unitPrice });
-    }
-    const order = await api('POST', '/orders', {
-      customerId: pick(customers).id,
-      orderDate: dateInYear(),
-      deliveryDate: Math.random() > 0.3 ? dateInYear() : null,
-      notes: pick(['Urgent', 'Regular order', 'Handle with care', '']),
-      source: 0,
-      items: lines,
+  const cats = [], subs = [], items = [];
+  for (const [cat, sub, item, unit, price] of CATALOG) {
+    const c = await api('POST', '/categories', { name: cat, description: `${cat} products` });
+    cats.push(c);
+    const s = await api('POST', '/subcategories', { categoryId: c.id, name: sub, description: `${sub} (${cat})` });
+    subs.push(s);
+    const it = await api('POST', '/items', {
+      subCategoryId: s.id, name: item, sku: `SKU-${slug(item).slice(0, 6).toUpperCase()}`,
+      unit, stockQuantity: rint(200, 1500), unitPrice: price,
     });
-
-    // ~70% get a delivery status (so payment can read as Partial when partly paid)
-    if (Math.random() > 0.3) await api('PUT', `/orders/${order.id}/status`, { status: pick(statuses) });
-
-    const roll = Math.random();
-    if (roll > 0.6) { await api('POST', '/payments', { orderId: order.id, amount: order.totalAmount, method: pick(METHODS), note: 'Full payment' }); paid++; }
-    else if (roll > 0.3) { await api('POST', '/payments', { orderId: order.id, amount: Math.max(1, Math.round(order.totalAmount * 0.4)), method: pick(METHODS), note: 'Advance' }); paid++; }
+    items.push(it);
   }
-  console.log(`Orders: ${N} (payments on ${paid})`);
+  console.log(`✓ ${cats.length} categories, ${subs.length} sub-categories, ${items.length} items`);
 
-  // 7) Dispatches (distinct truck labels so same-day entries don't merge)
-  let dispatches = 0;
-  for (let i = 0; i < N; i++) {
-    const used = new Set();
-    const lines = [];
-    for (let j = 0; j < rand(1, 3); j++) {
-      const it = pick(inv);
-      if (used.has(it.id)) continue;
-      used.add(it.id);
-      lines.push({ itemId: it.id, quantity: rand(1, 20) });
-    }
-    if (!lines.length) continue;
-    await api('POST', '/dispatch', { truckLabel: `Truck-${i + 1}`, notes: `Dispatch run #${i + 1}`, items: lines });
-    dispatches++;
+  const customers = [];
+  for (let i = 0; i < CUSTOMERS.length; i++) {
+    const name = CUSTOMERS[i];
+    customers.push(await api('POST', '/customers', {
+      name, phone: `9${rint(700000000, 899999999)}`, email: `${slug(name)}@example.com`,
+      address: `${name}, ${ROUTES[i]}, Mumbai`, routeId: routes[i].id,
+    }));
   }
-  console.log(`Dispatches: ${dispatches}`);
+  console.log(`✓ ${customers.length} customers`);
 
-  // 8) My Orders (stock requests) — varied status + payments
+  const states = ['MH', 'GJ', 'KA', 'DL', 'RJ'];
+  const trucks = [];
+  for (let i = 1; i <= 20; i++) {
+    const plate = `${pick(states)}-${rint(1, 49).toString().padStart(2, '0')}-${String.fromCharCode(65 + rint(0, 25))}${String.fromCharCode(65 + rint(0, 25))}-${rint(1000, 9999)}`;
+    trucks.push(await api('POST', '/trucks', { name: plate }));
+  }
+  console.log(`✓ ${trucks.length} trucks`);
+
+  let orders = 0;
+  for (let i = 0; i < 20; i++) {
+    const chosen = pickItems(items, rint(1, 3));
+    await api('POST', '/orders', { customerId: customers[i].id, source: 0, notes: pick(ORDER_NOTES),
+      items: chosen.map((it) => ({ itemId: it.id, quantity: rint(2, 12) })) });
+    orders++;
+  }
+  console.log(`✓ ${orders} customer orders`);
+
   let reqs = 0;
-  for (let i = 0; i < N; i++) {
-    const used = new Set();
-    const lines = [];
-    for (let j = 0; j < rand(1, 3); j++) {
-      const it = pick(inv);
-      if (used.has(it.id)) continue;
-      used.add(it.id);
-      lines.push({ itemId: it.id, quantity: rand(1, 15), unitPrice: it.unitPrice });
-    }
-    const req = await api('POST', '/stock-requests', { notes: pick(['Restock', 'Low stock', 'Monthly order', '']), items: lines });
+  for (let i = 0; i < 20; i++) {
+    const chosen = pickItems(items, rint(1, 2));
+    await api('POST', '/stock-requests', { notes: pick(REQ_NOTES),
+      items: chosen.map((it) => ({ itemId: it.id, quantity: rint(10, 50) })) });
     reqs++;
-
-    const roll = Math.random();
-    if (roll > 0.5) {
-      // pay something, then fulfill (and sometimes mark done)
-      if (Math.random() > 0.5) await api('POST', '/stock-request-payments', { stockRequestId: req.id, amount: Math.max(1, Math.round(req.totalAmount * (Math.random() > 0.5 ? 1 : 0.5))), method: pick(METHODS) });
-      await api('PUT', `/stock-requests/${req.id}/fulfill`, {});
-      if (Math.random() > 0.6) await api('PUT', `/stock-requests/${req.id}/done`, {});
-    }
   }
-  console.log(`My Orders (stock requests): ${reqs}`);
+  console.log(`✓ ${reqs} stock requests`);
 
-  console.log('\nDone. Refresh the app to see the data.');
-})().catch((e) => { console.error('FAILED:', e.message); process.exit(1); });
+  let disp = 0;
+  for (let i = 0; i < 20; i++) {
+    const chosen = pickItems(items, rint(1, 2));
+    // distinct truck per dispatch avoids same-truck/day merge, so all 20 are separate records
+    await api('POST', '/dispatch', { truckLabel: trucks[i].name, notes: pick(DISPATCH_NOTES),
+      items: chosen.map((it) => ({ itemId: it.id, quantity: rint(2, 10) })) });
+    disp++;
+  }
+  console.log(`✓ ${disp} dispatches`);
+
+  console.log('Done.');
+}
+function pickItems(items, count) {
+  const copy = [...items];
+  const out = [];
+  for (let i = 0; i < count && copy.length; i++) out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0]);
+  return out;
+}
+main().catch((e) => { console.error('SEED FAILED:', e.message); process.exit(1); });

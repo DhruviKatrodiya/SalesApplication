@@ -5,7 +5,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { ApiService } from '../../core/api.service';
-import { ItemPriceHistory } from '../../core/models';
+import { ItemPriceHistory, InventoryMovement } from '../../core/models';
 
 @Component({
   selector: 'app-price-history-dialog',
@@ -26,18 +26,31 @@ import { ItemPriceHistory } from '../../core/models';
           <div><span class="lbl">Stock Value</span><span class="val">{{ h.stockValue | currency:'INR' }}</span></div>
         </div>
 
-        <h3>Batches (newest first)</h3>
+        <h3>Batches (FIFO — oldest consumed first)</h3>
         <table mat-table [dataSource]="h.batches" class="full">
           <ng-container matColumnDef="date"><th mat-header-cell *matHeaderCellDef>Received</th><td mat-cell *matCellDef="let b">{{ b.createdAt | date:'dd-MM-yyyy' }}</td></ng-container>
-          <ng-container matColumnDef="qty"><th mat-header-cell *matHeaderCellDef>Qty</th><td mat-cell *matCellDef="let b">{{ b.quantity }}</td></ng-container>
+          <ng-container matColumnDef="received"><th mat-header-cell *matHeaderCellDef>Received</th><td mat-cell *matCellDef="let b">{{ b.received }}</td></ng-container>
+          <ng-container matColumnDef="remaining"><th mat-header-cell *matHeaderCellDef>Remaining</th><td mat-cell *matCellDef="let b">{{ b.remaining }}</td></ng-container>
           <ng-container matColumnDef="price"><th mat-header-cell *matHeaderCellDef>Purchase Price</th><td mat-cell *matCellDef="let b">{{ b.purchasePrice | currency:'INR' }}</td></ng-container>
-          <ng-container matColumnDef="value"><th mat-header-cell *matHeaderCellDef>Batch Value</th><td mat-cell *matCellDef="let b">{{ (b.quantity * b.purchasePrice) | currency:'INR' }}</td></ng-container>
+          <ng-container matColumnDef="value"><th mat-header-cell *matHeaderCellDef>Remaining Value</th><td mat-cell *matCellDef="let b">{{ (b.remaining * b.purchasePrice) | currency:'INR' }}</td></ng-container>
           <ng-container matColumnDef="source"><th mat-header-cell *matHeaderCellDef>Source</th><td mat-cell *matCellDef="let b">{{ b.sourceRequestNumber || 'Opening' }}</td></ng-container>
           <tr mat-header-row *matHeaderRowDef="columns"></tr>
           <tr mat-row *matRowDef="let row; columns: columns"></tr>
         </table>
-        @if (!h.batches.length) { <div class="empty">No price history yet — fulfil an inventory request to record batches.</div> }
-        <p class="note">Stock value uses weighted-average cost. Exact FIFO valuation arrives with consumption tracking (next phase).</p>
+        @if (!h.batches.length) { <div class="empty">No batches yet — fulfil an inventory request to record price-tagged stock.</div> }
+
+        <h3>Stock Movements (audit)</h3>
+        <table mat-table [dataSource]="movements()" class="full">
+          <ng-container matColumnDef="mdate"><th mat-header-cell *matHeaderCellDef>Date</th><td mat-cell *matCellDef="let m">{{ m.createdAt | date:'dd-MM-yyyy' }}</td></ng-container>
+          <ng-container matColumnDef="type"><th mat-header-cell *matHeaderCellDef>Type</th><td mat-cell *matCellDef="let m"><span [class]="m.type === 'IN' ? 'chip chip-ok' : 'chip chip-remaining'">{{ m.type }}</span>{{ m.reversed ? ' (reversed)' : '' }}</td></ng-container>
+          <ng-container matColumnDef="mqty"><th mat-header-cell *matHeaderCellDef>Qty</th><td mat-cell *matCellDef="let m">{{ m.quantity }}</td></ng-container>
+          <ng-container matColumnDef="mcost"><th mat-header-cell *matHeaderCellDef>Unit Cost</th><td mat-cell *matCellDef="let m">{{ m.unitCost | currency:'INR' }}</td></ng-container>
+          <ng-container matColumnDef="mtotal"><th mat-header-cell *matHeaderCellDef>Total</th><td mat-cell *matCellDef="let m">{{ m.totalCost | currency:'INR' }}</td></ng-container>
+          <ng-container matColumnDef="msource"><th mat-header-cell *matHeaderCellDef>Reference</th><td mat-cell *matCellDef="let m">{{ m.source || m.refType }}</td></ng-container>
+          <tr mat-header-row *matHeaderRowDef="moveColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: moveColumns"></tr>
+        </table>
+        @if (!movements().length) { <div class="empty">No movements recorded yet.</div> }
       } @else {
         <div class="empty">Loading…</div>
       }
@@ -60,9 +73,12 @@ export class PriceHistoryDialog implements OnInit {
   private api = inject(ApiService);
   data = inject<{ id: number; name: string }>(MAT_DIALOG_DATA);
   history = signal<ItemPriceHistory | null>(null);
-  columns = ['date', 'qty', 'price', 'value', 'source'];
+  movements = signal<InventoryMovement[]>([]);
+  columns = ['date', 'received', 'remaining', 'price', 'value', 'source'];
+  moveColumns = ['mdate', 'type', 'mqty', 'mcost', 'mtotal', 'msource'];
 
   ngOnInit() {
     this.api.getItemPriceHistory(this.data.id).subscribe(h => this.history.set(h));
+    this.api.getItemMovements(this.data.id).subscribe(m => this.movements.set(m));
   }
 }

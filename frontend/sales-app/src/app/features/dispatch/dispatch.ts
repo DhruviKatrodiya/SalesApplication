@@ -130,7 +130,7 @@ export class Dispatch implements OnInit {
 
   loadItems() { this.api.getAllItems().subscribe(list => this.items.set(list)); }
   loadTrucks() {
-    this.api.getTrucks().subscribe(list => this.trucks.set(list));
+    this.api.getAllTrucks().subscribe(list => this.trucks.set(list));
     this.api.getDispatchTruckLabels().subscribe(labels => this.historyTruckLabels.set(labels));
   }
 
