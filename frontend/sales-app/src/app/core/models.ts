@@ -1,11 +1,11 @@
 // ---- Enums (numeric, mirror the backend) ----
-export enum OrderStatus { Pending = 0, Dispatched = 1, Delivered = 2, Completed = 3, Remaining = 4 }
+export enum OrderStatus { Pending = 0, Dispatched = 1, Delivered = 2, Completed = 3, Remaining = 4, Cancelled = 5 }
 export enum PaymentStatus { Pending = 0, Advance = 1, Paid = 2, Partial = 3 }
 export enum ReceivedStatus { Pending = 0, Remaining = 1, Completed = 2 }
 export enum OrderSource { Inventory = 0, Dispatch = 1 }
 
 export const OrderStatusLabels: Record<number, string> = {
-  0: 'Pending', 1: 'Dispatched', 2: 'Delivered', 3: 'Completed', 4: 'Remaining'
+  0: 'Pending', 1: 'Dispatched', 2: 'Delivered', 3: 'Completed', 4: 'Remaining', 5: 'Cancelled'
 };
 export const PaymentStatusLabels: Record<number, string> = {
   0: 'Pending', 1: 'Advance', 2: 'Paid', 3: 'Partial'
@@ -44,7 +44,7 @@ export interface InventoryBatch { id: number; received: number; remaining: numbe
 export interface ItemPriceHistory {
   itemId: number; name: string; stockQuantity: number;
   oldestPrice: number; latestPrice: number; avgCost: number; stockValue: number;
-  batches: InventoryBatch[];
+  batches: InventoryBatch[]; batchesTotal: number;
 }
 export interface InventoryMovement {
   id: number; type: string; quantity: number; unitCost: number; totalCost: number;
@@ -66,7 +66,7 @@ export interface StockRequestAdvance { totalPaid: number; requestPayments: numbe
 // ---- Dispatch ----
 export interface DispatchItem { itemId: number; itemName: string; quantity: number; }
 export interface Dispatch {
-  id: number; dispatchDate: string; truckLabel: string; notes?: string; items: DispatchItem[];
+  id: number; dispatchDate: string; truckLabel: string; notes?: string; items: DispatchItem[]; isActive: boolean;
 }
 
 // ---- Customers ----

@@ -18,6 +18,7 @@ import { ApiService } from '../../core/api.service';
 import { Item, StockRequest, StockRequestStatus, StockRequestStatusLabels, PaymentStatusLabels, StockRequestAdvance } from '../../core/models';
 import { RequestDialog } from './request-dialog';
 import { RequestPaymentDialog } from './request-payment-dialog';
+import { RequestItemsDialog } from './request-items-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 import { DateInputDirective } from '../../shared/date-input.directive';
@@ -137,6 +138,10 @@ export class MyOrders implements OnInit {
       });
   }
   payChipClass(s: number): string { return 'chip chip-' + (this.paymentLabel[s] ?? '').toLowerCase(); }
+
+  viewItems(r: StockRequest) {
+    this.dialog.open(RequestItemsDialog, { data: r, width: '620px', maxWidth: '95vw' });
+  }
 
   managePayments(r: StockRequest) {
     this.dialog.open(RequestPaymentDialog, { data: r }).afterClosed().subscribe(changed => {

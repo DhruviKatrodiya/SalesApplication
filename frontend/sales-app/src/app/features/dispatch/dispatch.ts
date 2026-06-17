@@ -12,11 +12,15 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatPaginatorModule } from '@angular/material/paginator';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/api.service';
 import { Item, Dispatch as DispatchModel, DispatchDraftItem, Truck } from '../../core/models';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 import { DateInputDirective } from '../../shared/date-input.directive';
+import { ConfirmDialog } from '../../shared/confirm-dialog';
+import { DispatchEditDialog } from './dispatch-edit-dialog';
+import { DispatchItemsDialog } from './dispatch-items-dialog';
 
 interface CartLine { itemId: number; itemName: string; quantity: number; available: number; truckLabel: string; }
 
@@ -66,6 +70,7 @@ interface CartLine { itemId: number; itemName: string; quantity: number; availab
 export class Dispatch implements OnInit {
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   items = signal<Item[]>([]);
   history = signal<DispatchModel[]>([]);
@@ -115,9 +120,10 @@ export class Dispatch implements OnInit {
   // Dispatch-history search filters (server-side)
   truckSearch = signal('');
   dateSearch = signal<Date | null>(null);
+  activeFilter = signal<'active' | 'inactive' | 'all'>('all');
 
   cartColumns = ['srNo', 'truck', 'item', 'available', 'qty', 'actions'];
-  historyColumns = ['srNo', 'date', 'truck', 'items', 'notes'];
+  historyColumns = ['srNo', 'date', 'truck', 'items', 'notes', 'status', 'actions'];
 
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   historyPager = createServerPager(() => this.loadHistory());
@@ -155,6 +161,7 @@ export class Dispatch implements OnInit {
     this.api.getDispatches({
       truck: this.truckSearch() || undefined,
       date: d ? this.toIsoDate(d) : undefined,
+      active: this.activeFilter(),
       page: this.historyPager.pageIndex() + 1,
       pageSize: this.historyPager.pageSize()
     }).subscribe(res => {
@@ -169,10 +176,56 @@ export class Dispatch implements OnInit {
     });
   }
 
+  viewItems(d: DispatchModel) {
+    this.dialog.open(DispatchItemsDialog, { data: d, width: '560px', maxWidth: '95vw' });
+  }
+
+  editDispatch(d: DispatchModel) {
+    this.dialog.open(DispatchEditDialog, {
+      width: '640px', maxWidth: '95vw',
+      data: { dispatch: d, items: this.items(), trucks: this.trucks() }
+    }).afterClosed().subscribe(res => {
+      if (!res) return;
+      this.api.updateDispatch(d.id, res).subscribe({
+        next: () => {
+          this.snack.open('Dispatch updated. Stock adjusted.', 'Close', { duration: 3000 });
+          this.loadItems(); this.loadTrucks(); this.loadHistory();
+        },
+        error: (e) => this.snack.open(e?.error?.message ?? 'Could not update dispatch.', 'Close', { duration: 4000 })
+      });
+    });
+  }
+
+  removeDispatch(d: DispatchModel) {
+    this.dialog.open(ConfirmDialog, {
+      data: { title: 'Deactivate dispatch', message: `Mark this dispatch for ${d.truckLabel} inactive? The loaded stock returns to godown.` }
+    }).afterClosed().subscribe(ok => {
+      if (!ok) return;
+      this.api.deleteDispatch(d.id).subscribe({
+        next: () => {
+          this.snack.open('Dispatch marked inactive. Stock returned to godown.', 'Close', { duration: 3000 });
+          this.loadItems(); this.loadTrucks(); this.loadHistory();
+        },
+        error: (e) => this.snack.open(e?.error?.message ?? 'Could not deactivate dispatch.', 'Close', { duration: 4000 })
+      });
+    });
+  }
+
+  activateDispatch(d: DispatchModel) {
+    this.api.activateDispatch(d.id).subscribe({
+      next: () => {
+        this.snack.open('Dispatch activated. Stock re-loaded onto the truck.', 'Close', { duration: 3000 });
+        this.loadItems(); this.loadTrucks(); this.loadHistory();
+      },
+      error: (e) => this.snack.open(e?.error?.message ?? 'Could not activate dispatch.', 'Close', { duration: 4000 })
+    });
+  }
+
   setTruckSearch(v: string) { this.truckSearch.set(v); this.historyPager.reset(); this.loadHistory(); }
   setDateSearch(d: Date | null) { this.dateSearch.set(d); this.historyPager.reset(); this.loadHistory(); }
-  hasHistoryFilters = () => !!this.truckSearch() || !!this.dateSearch();
-  clearHistoryFilters() { this.truckSearch.set(''); this.dateSearch.set(null); this.historyPager.reset(); this.loadHistory(); }
+  setActiveFilter(v: 'active' | 'inactive' | 'all') { this.activeFilter.set(v); this.historyPager.reset(); this.loadHistory(); }
+  hasHistoryFilters = () => !!this.truckSearch() || !!this.dateSearch() || this.activeFilter() !== 'all';
+  clearHistoryFilters() { this.truckSearch.set(''); this.dateSearch.set(null); this.activeFilter.set('all'); this.historyPager.reset(); this.loadHistory(); }
 
   private toIsoDate(d: Date): string {
     const y = d.getFullYear();

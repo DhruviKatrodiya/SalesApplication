@@ -28,8 +28,14 @@ public static class OrderMath
     /// <summary>Amount paid against a single order, never more than the order total.</summary>
     public static decimal AppliedToOrder(Order order) => Math.Min(order.PaidAmount, order.TotalAmount);
 
-    /// <summary>Overpayment on a single order — the part that becomes advance.</summary>
-    public static decimal OverpaidOn(Order order) => Math.Max(0, order.PaidAmount - order.TotalAmount);
+    /// <summary>
+    /// Overpayment on a single order — the part that becomes advance. A cancelled order's
+    /// entire paid amount becomes advance/credit (the order itself is void).
+    /// </summary>
+    public static decimal OverpaidOn(Order order) =>
+        order.Status == OrderStatus.Cancelled
+            ? Math.Max(0, order.PaidAmount)
+            : Math.Max(0, order.PaidAmount - order.TotalAmount);
 
     /// <summary>Customer advance = money paid beyond what each order required, summed across orders.</summary>
     public static decimal AdvanceBalance(IEnumerable<Order> orders) => orders.Sum(OverpaidOn);

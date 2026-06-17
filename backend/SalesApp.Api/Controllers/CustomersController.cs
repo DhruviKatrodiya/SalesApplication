@@ -155,26 +155,30 @@ public class CustomersController : OwnedControllerBase
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
-        var totalOrdered = orders.Sum(o => o.TotalAmount);
-        var totalPaid = orders.Sum(o => o.PaidAmount);                 // all money received (advance entries net out)
-        var advanceBalance = OrderMath.AdvanceBalance(orders);         // extra paid, still unused
-        var orderPayments = totalPaid - advanceBalance;               // money applied to orders
+        // Cancelled orders are excluded from the customer's active orders & totals; any amount
+        // paid on them becomes advance/credit (handled by OrderMath.OverpaidOn).
+        var active = orders.Where(o => o.Status != OrderStatus.Cancelled).ToList();
+
+        var totalOrdered = active.Sum(o => o.TotalAmount);
+        var totalPaid = orders.Sum(o => o.PaidAmount);                 // all money received (incl. cancelled, now advance)
+        var advanceBalance = OrderMath.AdvanceBalance(orders);         // extra paid + cancelled paid, still unused
+        var orderPayments = totalPaid - advanceBalance;               // money applied to (active) orders
         var advanceUsed = orders.SelectMany(o => o.Payments)          // advance already applied to orders
             .Where(p => p.Method == PaymentMethods.Advance).Sum(p => p.Amount);
         // Outstanding due, computed defensively so it is never reduced by overpayments on other orders.
-        var totalRemaining = orders.Sum(o => Math.Max(0, o.TotalAmount - o.PaidAmount));
+        var totalRemaining = active.Sum(o => Math.Max(0, o.TotalAmount - o.PaidAmount));
 
         string overall = totalPaid <= 0 ? "Pending"
             : totalRemaining <= 0 ? "Paid"
             : "Advance";
 
-        var pending = orders.Count(o => o.Status != OrderStatus.Delivered && o.Status != OrderStatus.Completed);
-        var delivered = orders.Count(o => o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed);
+        var pending = active.Count(o => o.Status != OrderStatus.Delivered && o.Status != OrderStatus.Completed);
+        var delivered = active.Count(o => o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Completed);
 
         return new CustomerSearchResult(
             Mappers.ToDto(c), totalOrdered, totalPaid, totalRemaining,
             orderPayments, advanceBalance, advanceUsed, overall,
-            pending, delivered, orders.Select(Mappers.ToDto).ToList());
+            pending, delivered, active.Select(Mappers.ToDto).ToList());
     }
 
     /// <summary>The customer's available advance balance (money paid beyond their order totals).</summary>

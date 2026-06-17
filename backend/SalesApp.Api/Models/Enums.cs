@@ -6,7 +6,8 @@ public enum OrderStatus
     Dispatched = 1,
     Delivered = 2,
     Completed = 3,
-    Remaining = 4
+    Remaining = 4,
+    Cancelled = 5
 }
 
 public enum PaymentStatus

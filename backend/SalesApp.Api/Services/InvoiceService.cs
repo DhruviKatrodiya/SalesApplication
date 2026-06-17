@@ -33,9 +33,9 @@ public class InvoiceService : IInvoiceService
                     row.ConstantItem(180).AlignRight().Column(c =>
                     {
                         c.Item().Text($"Invoice: {order.OrderNumber}").Bold();
-                        c.Item().Text($"Date: {order.OrderDate:dd-MM-yyyy}");
+                        c.Item().Text($"Date: {order.OrderDate:dd-MM-yyyy HH:mm}");
                         if (order.DeliveryDate is not null)
-                            c.Item().Text($"Delivery: {order.DeliveryDate:dd-MM-yyyy}");
+                            c.Item().Text($"Delivery: {order.DeliveryDate:dd-MM-yyyy HH:mm}");
                     });
                 });
 

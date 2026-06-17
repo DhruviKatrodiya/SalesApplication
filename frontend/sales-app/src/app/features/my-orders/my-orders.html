@@ -78,7 +78,9 @@
         <ng-container matColumnDef="items">
           <th mat-header-cell *matHeaderCellDef>Items</th>
           <td mat-cell *matCellDef="let r">
-            @for (it of r.items; track it.itemId) { <span class="chip chip-ok" style="margin:2px">{{ it.itemName }} × {{ it.quantity }}</span> }
+            <button mat-stroked-button color="primary" style="white-space:nowrap" (click)="viewItems(r)">
+              <mat-icon>list_alt</mat-icon> {{ r.items.length }} item{{ r.items.length === 1 ? '' : 's' }}
+            </button>
           </td>
         </ng-container>
         <ng-container matColumnDef="status">

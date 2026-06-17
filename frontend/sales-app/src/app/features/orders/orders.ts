@@ -160,8 +160,27 @@ export class Orders implements OnInit {
       });
   }
 
-  /** An order is locked (no further editing) once it is Completed. */
-  isLocked(o: Order): boolean { return o.status === OrderStatus.Completed; }
+  /** An order is locked (no further editing) once it is Completed or Cancelled. */
+  isLocked(o: Order): boolean { return o.status === OrderStatus.Completed || o.status === OrderStatus.Cancelled; }
+
+  /** A cancelled order is read-only — every action is disabled. */
+  isCancelled(o: Order): boolean { return o.status === OrderStatus.Cancelled; }
+
+  cancel(o: Order) {
+    this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Cancel order',
+        message: `Cancel order ${o.orderNumber}? Its stock returns to inventory/truck, and any amount paid becomes the customer's advance balance.`,
+        confirmText: 'Cancel Order'
+      }
+    }).afterClosed().subscribe(ok => {
+      if (!ok) return;
+      this.api.cancelOrder(o.id).subscribe({
+        next: () => { this.snack.open('Order cancelled. Stock returned; payment moved to advance.', 'Close', { duration: 3500 }); this.load(); },
+        error: (e) => this.snack.open(e?.error?.message ?? 'Could not cancel order.', 'Close', { duration: 4000 })
+      });
+    });
+  }
 
   changeStatus(o: Order, status: OrderStatus) {
     this.api.updateOrderStatus(o.id, status).subscribe(updated => {

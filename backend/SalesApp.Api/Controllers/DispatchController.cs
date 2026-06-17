@@ -23,11 +23,11 @@ public class DispatchController : ControllerBase
 
     private static DispatchDto Map(Dispatch d) => new(
         d.Id, d.DispatchDate, d.TruckLabel, d.Notes,
-        d.Items.Select(x => new DispatchItemDto(x.ItemId, x.Item!.Name, x.Quantity)).ToList());
+        d.Items.Select(x => new DispatchItemDto(x.ItemId, x.Item!.Name, x.Quantity)).ToList(), d.IsActive);
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<DispatchDto>>> GetAll(
-        [FromQuery] string? truck, [FromQuery] DateTime? date,
+        [FromQuery] string? truck, [FromQuery] DateTime? date, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -38,6 +38,7 @@ public class DispatchController : ControllerBase
             .Include(d => d.Items).ThenInclude(i => i.Item)
             .Where(d => d.UserId == uid);
 
+        if (active != "all") query = query.Where(d => d.IsActive == (active != "inactive"));
         if (!string.IsNullOrWhiteSpace(truck))
         {
             var t = truck.Trim();
@@ -139,11 +140,15 @@ public class DispatchController : ControllerBase
             dispatch.Notes = req.Notes;   // keep the latest note
         }
 
+        // Persist the truck + dispatch shell first so the dispatch has an Id; the FIFO
+        // consumption movements are tagged with it, which lets edit/delete reverse exactly.
+        await _db.SaveChangesAsync();
+
         foreach (var line in req.Items)
         {
             var item = items[line.ItemId];
             // FIFO-consume the godown stock (oldest batch first) and log the movement + COGS.
-            await _inv.ConsumeFifoAsync(item, line.Quantity, "Dispatch", null, truck);
+            await _inv.ConsumeFifoAsync(item, line.Quantity, "Dispatch", dispatch.Id, truck);
             item.DispatchStock += line.Quantity;    // ...and is loaded onto the truck (aggregate, all trucks)
 
             // Add to this specific truck's own stock ledger.
@@ -162,6 +167,165 @@ public class DispatchController : ControllerBase
         var saved = await _db.Dispatches.Include(x => x.Items).ThenInclude(i => i.Item)
             .FirstAsync(x => x.Id == dispatch.Id);
         return CreatedAtAction(nameof(Get), new { id = dispatch.Id }, Map(saved));
+    }
+
+    /// <summary>
+    /// Reverses a dispatch's stock effects: returns the loaded quantities to godown stock,
+    /// and removes them from the aggregate dispatch stock and the specific truck's ledger.
+    /// </summary>
+    private async Task ReverseDispatchStockAsync(Dispatch dispatch)
+    {
+        var uid = dispatch.UserId;
+        // Precise restore (batch quantities + godown stock) when movements are linked to this dispatch.
+        var linked = await _db.InventoryTransactions.AnyAsync(t =>
+            t.RefType == "Dispatch" && t.RefId == dispatch.Id && t.Type == InventoryTxnType.Out && !t.Reversed);
+        if (linked) await _inv.ReverseAsync("Dispatch", dispatch.Id);
+
+        var itemIds = dispatch.Items.Select(i => i.ItemId).ToList();
+        var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+        var truckEntity = await _db.Trucks.Include(t => t.Stock)
+            .FirstOrDefaultAsync(t => t.UserId == uid && t.Name == dispatch.TruckLabel);
+
+        foreach (var line in dispatch.Items)
+        {
+            if (items.TryGetValue(line.ItemId, out var it))
+            {
+                if (!linked) it.StockQuantity += line.Quantity;   // legacy dispatches had no movement link
+                it.DispatchStock = Math.Max(0, it.DispatchStock - line.Quantity);
+            }
+            var ts = truckEntity?.Stock.FirstOrDefault(s => s.ItemId == line.ItemId);
+            if (ts is not null) ts.Quantity = Math.Max(0, ts.Quantity - line.Quantity);
+        }
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Edits a dispatch: restores the old stock effects then re-applies the new lines.</summary>
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<DispatchDto>> Update(int id, DispatchRequest req)
+    {
+        var uid = CurrentUserId;
+        var dispatch = await _db.Dispatches.Include(d => d.Items)
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == uid);
+        if (dispatch is null) return NotFound();
+        if (!dispatch.IsActive)
+            return BadRequest(new MessageResponse("This dispatch is inactive. Activate it before editing."));
+        if (req.Items is null || req.Items.Count == 0)
+            return BadRequest(new MessageResponse("At least one item is required."));
+
+        var allIds = req.Items.Select(i => i.ItemId).Concat(dispatch.Items.Select(i => i.ItemId)).Distinct().ToList();
+        var items = await _db.Items.Where(i => allIds.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
+
+        // Quantity this dispatch currently holds per item — it returns to godown when reversed.
+        var heldByThis = dispatch.Items.GroupBy(i => i.ItemId).ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
+
+        // Validate up front: reversal persists immediately, so we must not fail half-way.
+        foreach (var line in req.Items)
+        {
+            if (!items.TryGetValue(line.ItemId, out var item))
+                return BadRequest(new MessageResponse($"Item {line.ItemId} not found."));
+            if (line.Quantity <= 0)
+                return BadRequest(new MessageResponse($"Quantity for '{item.Name}' must be greater than zero."));
+            var requested = req.Items.Where(x => x.ItemId == line.ItemId).Sum(x => x.Quantity);
+            var available = item.StockQuantity + (heldByThis.TryGetValue(line.ItemId, out var h) ? h : 0);
+            if (requested > available)
+                return BadRequest(new MessageResponse(
+                    $"Insufficient stock for '{item.Name}'. Available: {available}, requested: {requested}."));
+        }
+
+        // Reverse the existing stock effects, then replace the lines.
+        await ReverseDispatchStockAsync(dispatch);
+
+        var truck = string.IsNullOrWhiteSpace(req.TruckLabel) ? dispatch.TruckLabel : req.TruckLabel!.Trim();
+        var truckEntity = await _db.Trucks.Include(t => t.Stock).FirstOrDefaultAsync(t => t.UserId == uid && t.Name == truck);
+        if (truckEntity is null) { truckEntity = new Truck { UserId = uid, Name = truck }; _db.Trucks.Add(truckEntity); }
+
+        _db.DispatchItems.RemoveRange(dispatch.Items);
+        dispatch.Items.Clear();
+        dispatch.TruckLabel = truck;
+        dispatch.Notes = req.Notes;
+        await _db.SaveChangesAsync();
+
+        foreach (var line in req.Items)
+        {
+            var item = items[line.ItemId];
+            await _inv.ConsumeFifoAsync(item, line.Quantity, "Dispatch", dispatch.Id, truck);
+            item.DispatchStock += line.Quantity;
+            var ts = truckEntity.Stock.FirstOrDefault(s => s.ItemId == line.ItemId);
+            if (ts is null) { ts = new TruckStock { ItemId = line.ItemId, Quantity = 0 }; truckEntity.Stock.Add(ts); }
+            ts.Quantity += line.Quantity;
+            var existing = dispatch.Items.FirstOrDefault(x => x.ItemId == line.ItemId);
+            if (existing is not null) existing.Quantity += line.Quantity;
+            else dispatch.Items.Add(new DispatchItem { ItemId = line.ItemId, Quantity = line.Quantity });
+        }
+        await _db.SaveChangesAsync();
+
+        var saved = await _db.Dispatches.Include(x => x.Items).ThenInclude(i => i.Item).FirstAsync(x => x.Id == dispatch.Id);
+        return Ok(Map(saved));
+    }
+
+    /// <summary>
+    /// Soft-deletes a dispatch: flags it inactive and returns its loaded stock to godown
+    /// (off the truck). The record is kept and can be reactivated.
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var uid = CurrentUserId;
+        var dispatch = await _db.Dispatches.Include(d => d.Items)
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == uid);
+        if (dispatch is null) return NotFound();
+        if (!dispatch.IsActive) return NoContent();   // already inactive
+
+        await ReverseDispatchStockAsync(dispatch);
+        dispatch.IsActive = false;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>Reactivates a soft-deleted dispatch: re-loads its stock onto the truck (FIFO).</summary>
+    [HttpPut("{id:int}/activate")]
+    public async Task<ActionResult<DispatchDto>> Activate(int id)
+    {
+        var uid = CurrentUserId;
+        var dispatch = await _db.Dispatches.Include(d => d.Items)
+            .FirstOrDefaultAsync(d => d.Id == id && d.UserId == uid);
+        if (dispatch is null) return NotFound();
+        if (dispatch.IsActive)
+        {
+            var current = await _db.Dispatches.Include(x => x.Items).ThenInclude(i => i.Item).FirstAsync(x => x.Id == id);
+            return Ok(Map(current));
+        }
+
+        var itemIds = dispatch.Items.Select(i => i.ItemId).ToList();
+        var items = await _db.Items.Where(i => itemIds.Contains(i.Id) && i.UserId == uid).ToDictionaryAsync(i => i.Id);
+
+        // Make sure there is enough godown stock to re-load before changing anything.
+        foreach (var line in dispatch.Items)
+        {
+            if (!items.TryGetValue(line.ItemId, out var item))
+                return BadRequest(new MessageResponse($"Item {line.ItemId} no longer exists; cannot reactivate this dispatch."));
+            if (item.StockQuantity < line.Quantity)
+                return BadRequest(new MessageResponse(
+                    $"Insufficient stock for '{item.Name}' to reactivate. Available: {item.StockQuantity}, needed: {line.Quantity}."));
+        }
+
+        var truckEntity = await _db.Trucks.Include(t => t.Stock).FirstOrDefaultAsync(t => t.UserId == uid && t.Name == dispatch.TruckLabel);
+        if (truckEntity is null) { truckEntity = new Truck { UserId = uid, Name = dispatch.TruckLabel }; _db.Trucks.Add(truckEntity); await _db.SaveChangesAsync(); }
+
+        foreach (var line in dispatch.Items)
+        {
+            var item = items[line.ItemId];
+            await _inv.ConsumeFifoAsync(item, line.Quantity, "Dispatch", dispatch.Id, dispatch.TruckLabel);
+            item.DispatchStock += line.Quantity;
+            var ts = truckEntity.Stock.FirstOrDefault(s => s.ItemId == line.ItemId);
+            if (ts is null) { ts = new TruckStock { ItemId = line.ItemId, Quantity = 0 }; truckEntity.Stock.Add(ts); }
+            ts.Quantity += line.Quantity;
+        }
+        dispatch.IsActive = true;
+        await _db.SaveChangesAsync();
+
+        var saved = await _db.Dispatches.Include(x => x.Items).ThenInclude(i => i.Item).FirstAsync(x => x.Id == dispatch.Id);
+        return Ok(Map(saved));
     }
 
     // ---- Draft (unsaved cart) persistence ----

@@ -28,7 +28,7 @@ public record InventoryBatchDto(int Id, int Received, int Remaining, decimal Pur
 public record ItemPriceHistoryDto(
     int ItemId, string Name, int StockQuantity,
     decimal OldestPrice, decimal LatestPrice, decimal AvgCost, decimal StockValue,
-    List<InventoryBatchDto> Batches);
+    List<InventoryBatchDto> Batches, int BatchesTotal);
 // Inventory movement ledger entry (audit)
 public record InventoryMovementDto(
     int Id, string Type, int Quantity, decimal UnitCost, decimal TotalCost,
@@ -64,4 +64,4 @@ public record DispatchDraftItemDto(int ItemId, int Quantity, string? TruckLabel)
 public record DispatchDraftDto(string? TruckLabel, string? Notes, List<DispatchDraftItemDto> Items);
 public record DispatchRequest(string? TruckLabel, string? Notes, List<DispatchItemRequest> Items);
 public record DispatchItemDto(int ItemId, string ItemName, int Quantity);
-public record DispatchDto(int Id, DateTime DispatchDate, string TruckLabel, string? Notes, List<DispatchItemDto> Items);
+public record DispatchDto(int Id, DateTime DispatchDate, string TruckLabel, string? Notes, List<DispatchItemDto> Items, bool IsActive = true);

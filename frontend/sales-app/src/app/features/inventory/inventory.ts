@@ -127,7 +127,10 @@ export class Inventory implements OnInit {
   remove(item: Item) {
     this.dialog.open(ConfirmDialog, { data: { title: 'Confirm', message: `Delete item "${item.name}"?` } })
       .afterClosed().subscribe(ok => {
-        if (ok) this.api.deleteItem(item.id).subscribe(() => { this.snack.open('Item deleted', 'Close', { duration: 2000 }); this.load(); });
+        if (ok) this.api.deleteItem(item.id).subscribe({
+          next: () => { this.snack.open('Item deleted', 'Close', { duration: 2000 }); this.load(); },
+          error: (e) => this.snack.open(e?.error?.message ?? 'Could not delete item.', 'Close', { duration: 5000 })
+        });
       });
   }
 }

@@ -25,19 +25,17 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Phone</mat-label>
-          <input matInput formControlName="phone" appDigitsOnly inputmode="numeric" maxlength="15" required />
-          @if (form.controls.phone.hasError('required')) { <mat-error>Phone is required</mat-error> }
+          <input matInput formControlName="phone" appDigitsOnly inputmode="numeric" maxlength="15" />
           @if (form.controls.phone.hasError('pattern')) { <mat-error>Enter a valid phone number (7–15 digits)</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Email</mat-label>
-          <input matInput type="email" formControlName="email" required />
-          @if (form.controls.email.hasError('required')) { <mat-error>Email is required</mat-error> }
+          <input matInput type="email" formControlName="email" />
           @if (form.controls.email.hasError('email')) { <mat-error>Enter a valid email address</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Route</mat-label>
-          <mat-select formControlName="routeId" required (opened)="onRouteSelectOpened()" (closed)="routeSearch.set('')">
+          <mat-select formControlName="routeId" (opened)="onRouteSelectOpened()" (closed)="routeSearch.set('')">
             <div class="select-search">
               <mat-icon class="select-search-icon">search</mat-icon>
               <input #routeSearchInput type="text" class="select-search-input" placeholder="Search route…"
@@ -53,7 +51,6 @@ interface DialogData { customer: Customer | null; routes: Route[]; }
               <div class="select-empty">No routes found</div>
             }
           </mat-select>
-          @if (form.controls.routeId.hasError('required')) { <mat-error>Route is required</mat-error> }
         </mat-form-field>
         <mat-form-field appearance="fill" class="full">
           <mat-label>Address</mat-label>
@@ -116,9 +113,9 @@ export class CustomerDialog {
 
   form = this.fb.nonNullable.group({
     name: [this.data.customer?.name ?? '', Validators.required],
-    phone: [this.data.customer?.phone ?? '', [Validators.required, Validators.pattern(/^\d{7,15}$/)]],
-    email: [this.data.customer?.email ?? '', [Validators.required, Validators.email]],
-    routeId: [this.data.customer?.routeId ?? null as number | null, Validators.required],
+    phone: [this.data.customer?.phone ?? '', Validators.pattern(/^\d{7,15}$/)],
+    email: [this.data.customer?.email ?? '', Validators.email],
+    routeId: [this.data.customer?.routeId ?? null as number | null],
     address: [this.data.customer?.address ?? '', Validators.required]
   });
 

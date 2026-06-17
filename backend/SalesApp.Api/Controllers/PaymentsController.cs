@@ -47,6 +47,7 @@ public class PaymentsController : ControllerBase
             .FirstOrDefaultAsync(o => o.Id == req.OrderId);
         if (order is null) return BadRequest(new MessageResponse("Order not found."));
         if (order.SalesmanId != CurrentUserId) return NotOwner();
+        if (order.Status == OrderStatus.Cancelled) return BadRequest(new MessageResponse("This order is cancelled."));
         if (req.Amount <= 0) return BadRequest(new MessageResponse("Amount must be greater than zero."));
 
         var payment = new Payment
@@ -134,6 +135,7 @@ public class PaymentsController : ControllerBase
             .FirstOrDefaultAsync(o => o.Id == orderId);
         if (order is null) return NotFound();
         if (order.SalesmanId != CurrentUserId) return NotOwner();
+        if (order.Status == OrderStatus.Cancelled) return BadRequest(new MessageResponse("This order is cancelled."));
 
         var remaining = order.TotalAmount - order.Payments.Sum(p => p.Amount);
         if (remaining > 0)

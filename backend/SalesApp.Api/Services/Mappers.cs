@@ -10,7 +10,9 @@ public static class Mappers
         o.OrderDate, o.DeliveryDate, o.Status, o.PaymentStatus, o.Source,
         // Remaining is derived so it is never negative even for orders persisted before
         // overpayment was tracked as advance — the overpaid part shows as the customer's advance.
-        o.TotalAmount, o.PaidAmount, Math.Max(0, o.TotalAmount - o.PaidAmount), o.Notes,
+        // A cancelled order has no balance due — its paid amount becomes the customer's advance.
+        o.TotalAmount, o.PaidAmount,
+        o.Status == OrderStatus.Cancelled ? 0 : Math.Max(0, o.TotalAmount - o.PaidAmount), o.Notes,
         o.Items.Select(i => new OrderItemDto(
             i.Id, i.ItemId, i.Item?.Name ?? string.Empty,
             i.Quantity, i.UnitPrice, i.LineTotal, i.ReceivedStatus)).ToList(),

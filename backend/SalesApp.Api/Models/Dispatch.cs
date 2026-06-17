@@ -7,6 +7,7 @@ public class Dispatch
     public DateTime DispatchDate { get; set; } = DateTime.UtcNow;
     public string TruckLabel { get; set; } = "Truck-1";  // single truck
     public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public ICollection<DispatchItem> Items { get; set; } = new List<DispatchItem>();
 }

@@ -91,6 +91,27 @@ public class OrdersController : ControllerBase
         return Ok(Mappers.ToDto(o));
     }
 
+    /// <summary>An order's line items (paged) — powers the "mark received status" dialog.</summary>
+    [HttpGet("{id:int}/items")]
+    public async Task<ActionResult<PagedResult<OrderItemDto>>> Items(
+        int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+    {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
+        var order = await _db.Orders.Include(o => o.Items).ThenInclude(i => i.Item)
+            .FirstOrDefaultAsync(o => o.Id == id && o.SalesmanId == CurrentUserId);
+        if (order is null) return NotFound();
+
+        var ordered = order.Items.OrderBy(i => i.Id).ToList();
+        var total = ordered.Count;
+        var items = ordered.Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(i => new OrderItemDto(i.Id, i.ItemId, i.Item?.Name ?? string.Empty,
+                i.Quantity, i.UnitPrice, i.LineTotal, i.ReceivedStatus))
+            .ToList();
+        return Ok(new PagedResult<OrderItemDto>(items, total, page, pageSize));
+    }
+
     [HttpPost]
     public async Task<ActionResult<OrderDto>> Create(OrderRequest req)
     {
@@ -201,6 +222,8 @@ public class OrdersController : ControllerBase
         if (order is null) return NotFound();
         var uid = CurrentUserId;
         if (order.SalesmanId != uid) return NotOwner();
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new MessageResponse("This order is cancelled and can no longer be edited."));
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and can no longer be edited."));
         if (req.Items is null || req.Items.Count == 0)
@@ -317,6 +340,8 @@ public class OrdersController : ControllerBase
         var order = await _db.Orders.Include(o => o.Payments).FirstOrDefaultAsync(o => o.Id == id);
         if (order is null) return NotFound();
         if (order.SalesmanId != CurrentUserId) return NotOwner();
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new MessageResponse("This order is cancelled and can no longer be changed."));
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and its status can no longer be changed."));
         order.Status = req.Status;
@@ -346,16 +371,9 @@ public class OrdersController : ControllerBase
         if (!await _db.Orders.AnyAsync(o => o.Id == id && o.SalesmanId == CurrentUserId)) return NotOwner();
         var line = await _db.OrderItems.FirstOrDefaultAsync(i => i.Id == orderItemId && i.OrderId == id);
         if (line is null) return NotFound();
+        // Update only this item's received status. The overall order status is left
+        // unchanged — it is managed independently via the order Status action.
         line.ReceivedStatus = req.ReceivedStatus;
-        await _db.SaveChangesAsync();
-
-        // If every line is completed, mark the order completed; otherwise keep current status.
-        var order = await _db.Orders.Include(o => o.Items).Include(o => o.Payments).FirstAsync(o => o.Id == id);
-        if (order.Items.All(i => i.ReceivedStatus == ReceivedStatus.Completed))
-            order.Status = OrderStatus.Completed;
-        else if (order.Items.Any(i => i.ReceivedStatus == ReceivedStatus.Remaining))
-            order.Status = OrderStatus.Remaining;
-        OrderMath.Recalculate(order);   // keep payment status (Advance/Partial) in sync with delivery state
         await _db.SaveChangesAsync();
 
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);
@@ -371,6 +389,51 @@ public class OrdersController : ControllerBase
         order.IsActive = false;
         await _db.SaveChangesAsync();
         return NoContent();
+    }
+
+    /// <summary>
+    /// Cancels an order: returns its stock to godown (inventory FIFO) or to the truck (dispatch),
+    /// voids the outstanding balance, and turns any amount already paid into the customer's advance/credit.
+    /// </summary>
+    [HttpPut("{id:int}/cancel")]
+    public async Task<ActionResult<OrderDto>> Cancel(int id)
+    {
+        var order = await _db.Orders.Include(o => o.Items).Include(o => o.Payments)
+            .FirstOrDefaultAsync(o => o.Id == id);
+        if (order is null) return NotFound();
+        if (order.SalesmanId != CurrentUserId) return NotOwner();
+        if (order.Status == OrderStatus.Cancelled)
+            return BadRequest(new MessageResponse("This order is already cancelled."));
+
+        // Return the order's stock to where it was drawn from.
+        if (order.Source == OrderSource.Inventory)
+        {
+            await _inv.ReverseAsync("Order", order.Id);   // restores godown stock + FIFO batches
+        }
+        else // Dispatch: put the quantities back onto the order's truck
+        {
+            var itemIds = order.Items.Select(i => i.ItemId).ToList();
+            var items = await _db.Items.Where(i => itemIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id);
+            var truck = order.TruckId is null ? null
+                : await _db.Trucks.Include(t => t.Stock).FirstOrDefaultAsync(t => t.Id == order.TruckId);
+            foreach (var line in order.Items)
+            {
+                if (items.TryGetValue(line.ItemId, out var it)) it.DispatchStock += line.Quantity;
+                if (truck is not null)
+                {
+                    var ts = truck.Stock.FirstOrDefault(s => s.ItemId == line.ItemId);
+                    if (ts is null) { ts = new TruckStock { ItemId = line.ItemId, Quantity = 0 }; truck.Stock.Add(ts); }
+                    ts.Quantity += line.Quantity;
+                }
+            }
+        }
+
+        order.Status = OrderStatus.Cancelled;
+        order.RemainingAmount = 0;   // no balance due; the paid amount becomes the customer's advance
+        await _db.SaveChangesAsync();
+
+        var saved = await WithIncludes().FirstAsync(o => o.Id == id);
+        return Ok(Mappers.ToDto(saved));
     }
 
     [HttpPut("{id:int}/activate")]

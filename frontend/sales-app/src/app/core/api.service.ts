@@ -4,7 +4,7 @@ import { map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   Category, SubCategory, Item, Customer, CustomerSearchResult, CustomerAdvance,
-  Order, OrderStatus, Payment, Dispatch, ReceivedStatus,
+  Order, OrderItem, OrderStatus, Payment, Dispatch, ReceivedStatus,
   ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment, StockRequestAdvance,
   Truck, TruckStockItem, ItemPriceHistory, InventoryMovement
 } from './models';
@@ -87,14 +87,25 @@ export class ApiService {
   updateItem(id: number, b: any) { return this.http.put<Item>(`${this.base}/items/${id}`, b); }
   deleteItem(id: number) { return this.http.delete(`${this.base}/items/${id}`); }
   activateItem(id: number) { return this.http.put(`${this.base}/items/${id}/activate`, {}); }
-  getItemPriceHistory(id: number) { return this.http.get<ItemPriceHistory>(`${this.base}/items/${id}/price-history`); }
-  getItemMovements(id: number) { return this.http.get<InventoryMovement[]>(`${this.base}/items/${id}/movements`); }
+  getItemPriceHistory(id: number, opts?: { page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<ItemPriceHistory>(`${this.base}/items/${id}/price-history`, { params: p });
+  }
+  getItemMovements(id: number, opts?: { page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<InventoryMovement>>(`${this.base}/items/${id}/movements`, { params: p });
+  }
 
   // ---- Dispatch ----
-  getDispatches(opts?: { truck?: string; date?: string; page?: number; pageSize?: number }) {
+  getDispatches(opts?: { truck?: string; date?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.truck) p = p.set('truck', opts.truck);
     if (opts?.date) p = p.set('date', opts.date);
+    if (opts?.active) p = p.set('active', opts.active);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Dispatch>>(`${this.base}/dispatch`, { params: p });
@@ -102,6 +113,11 @@ export class ApiService {
   createDispatch(b: { truckLabel?: string; notes?: string; items: { itemId: number; quantity: number }[] }) {
     return this.http.post<Dispatch>(`${this.base}/dispatch`, b);
   }
+  updateDispatch(id: number, b: { truckLabel?: string; notes?: string; items: { itemId: number; quantity: number }[] }) {
+    return this.http.put<Dispatch>(`${this.base}/dispatch/${id}`, b);
+  }
+  deleteDispatch(id: number) { return this.http.delete(`${this.base}/dispatch/${id}`); }
+  activateDispatch(id: number) { return this.http.put(`${this.base}/dispatch/${id}/activate`, {}); }
   // Unsaved dispatch cart, persisted per user (each line carries its truck)
   getDispatchTruckLabels() { return this.http.get<string[]>(`${this.base}/dispatch/trucks`); }
   getDispatchDraft() { return this.http.get<DispatchDraft>(`${this.base}/dispatch/draft`); }
@@ -191,6 +207,12 @@ export class ApiService {
     return this.getOrders({ page: 1, pageSize: 10000 }).pipe(map(r => r.items));
   }
   getOrder(id: number) { return this.http.get<Order>(`${this.base}/orders/${id}`); }
+  getOrderItems(id: number, opts?: { page?: number; pageSize?: number }) {
+    let p = new HttpParams();
+    if (opts?.page) p = p.set('page', opts.page);
+    if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
+    return this.http.get<PagedResult<OrderItem>>(`${this.base}/orders/${id}/items`, { params: p });
+  }
   createOrder(b: any) { return this.http.post<Order>(`${this.base}/orders`, b); }
   updateOrder(id: number, b: any) { return this.http.put<Order>(`${this.base}/orders/${id}`, b); }
   updateOrderStatus(id: number, status: OrderStatus) { return this.http.put<Order>(`${this.base}/orders/${id}/status`, { status }); }
@@ -200,6 +222,7 @@ export class ApiService {
   }
   deleteOrder(id: number) { return this.http.delete(`${this.base}/orders/${id}`); }
   activateOrder(id: number) { return this.http.put(`${this.base}/orders/${id}/activate`, {}); }
+  cancelOrder(id: number) { return this.http.put<Order>(`${this.base}/orders/${id}/cancel`, {}); }
 
   // ---- Payments ----
   getPaymentsByOrder(orderId: number) { return this.http.get<Payment[]>(`${this.base}/payments/by-order/${orderId}`); }

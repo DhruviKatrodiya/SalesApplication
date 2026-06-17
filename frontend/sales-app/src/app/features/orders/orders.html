@@ -101,15 +101,11 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let o">
-            <button mat-icon-button matTooltip="Payments" (click)="managePayments(o)"><mat-icon>payments</mat-icon></button>
-            <button mat-icon-button matTooltip="Items — mark received status" (click)="viewItems(o)"><mat-icon>checklist</mat-icon></button>
+            <button mat-icon-button matTooltip="Payments" [disabled]="isCancelled(o)" (click)="managePayments(o)"><mat-icon>payments</mat-icon></button>
+            <button mat-icon-button matTooltip="Items — mark received status" [disabled]="isCancelled(o)" (click)="viewItems(o)"><mat-icon>checklist</mat-icon></button>
             <button mat-icon-button matTooltip="Edit order" [disabled]="isLocked(o)" (click)="edit(o)"><mat-icon>edit</mat-icon></button>
-            @if (o.isActive) {
-              <button mat-icon-button matTooltip="Delete" (click)="remove(o)"><mat-icon>delete</mat-icon></button>
-            } @else {
-              <button mat-icon-button matTooltip="Activate" (click)="activate(o)"><mat-icon>restore</mat-icon></button>
-            }
-            <button mat-icon-button matTooltip="Download Invoice (PDF)" (click)="downloadInvoice(o)"><mat-icon>download</mat-icon></button>
+            <button mat-icon-button matTooltip="Cancel order" [disabled]="isCancelled(o)" (click)="cancel(o)"><mat-icon>cancel</mat-icon></button>
+            <button mat-icon-button matTooltip="Download Invoice (PDF)" [disabled]="isCancelled(o)" (click)="downloadInvoice(o)"><mat-icon>download</mat-icon></button>
           </td>
         </ng-container>
 

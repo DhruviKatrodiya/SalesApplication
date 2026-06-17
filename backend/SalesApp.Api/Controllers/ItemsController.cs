@@ -110,13 +110,18 @@ public class ItemsController : OwnedControllerBase
         return CreatedAtAction(nameof(Get), new { id = i.Id }, Map(i));
     }
 
-    /// <summary>Purchase-price history (batches) for an item, with current valuation.</summary>
+    /// <summary>Purchase-price history (batches) for an item, with current valuation. Batches are paged.</summary>
     [HttpGet("{id:int}/price-history")]
-    public async Task<ActionResult<ItemPriceHistoryDto>> PriceHistory(int id)
+    public async Task<ActionResult<ItemPriceHistoryDto>> PriceHistory(
+        int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         var item = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (item is null) return NotFound();
 
+        // All batches are needed for an exact FIFO valuation; only the returned list is paged.
         var batches = await _db.InventoryBatches
             .Where(b => b.ItemId == id)
             .OrderByDescending(b => b.CreatedAt).ThenByDescending(b => b.Id)
@@ -134,22 +139,31 @@ public class ItemsController : OwnedControllerBase
         var oldest = batches.Count > 0 ? batches[^1].PurchasePrice : item.UnitPrice;
         var latest = batches.Count > 0 ? batches[0].PurchasePrice : item.UnitPrice;
 
+        var pagedBatches = batches.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
         return Ok(new ItemPriceHistoryDto(item.Id, item.Name, item.StockQuantity,
-            oldest, latest, avgCost, stockValue, batches));
+            oldest, latest, avgCost, stockValue, pagedBatches, batches.Count));
     }
 
-    /// <summary>Inventory movement ledger for an item (receipts and FIFO consumption) — audit trail.</summary>
+    /// <summary>Inventory movement ledger for an item (receipts and FIFO consumption) — audit trail (paged).</summary>
     [HttpGet("{id:int}/movements")]
-    public async Task<ActionResult<IEnumerable<InventoryMovementDto>>> Movements(int id)
+    public async Task<ActionResult<PagedResult<InventoryMovementDto>>> Movements(
+        int id, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
+        page = page < 1 ? 1 : page;
+        pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
+
         if (!await _db.Items.AnyAsync(x => x.Id == id && x.UserId == CurrentUserId)) return NotFound();
-        var list = await _db.InventoryTransactions
+        var query = _db.InventoryTransactions
             .Where(t => t.ItemId == id)
-            .OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id)
+            .OrderByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id);
+        var total = await query.CountAsync();
+        var list = await query
+            .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(t => new InventoryMovementDto(t.Id, t.Type == InventoryTxnType.In ? "IN" : "OUT",
                 t.Quantity, t.UnitCost, t.TotalCost, t.RefType, t.Source, t.Reversed, t.CreatedAt))
             .ToListAsync();
-        return Ok(list);
+        return Ok(new PagedResult<InventoryMovementDto>(list, total, page, pageSize));
     }
 
     [HttpPut("{id:int}")]
@@ -176,6 +190,24 @@ public class ItemsController : OwnedControllerBase
     {
         var i = await _db.Items.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (i is null) return NotFound();
+
+        // Don't deactivate an item that still exists in another table / on another page
+        // (loaded on a truck, or referenced by an order, stock request or dispatch).
+        var usedInOrders = await _db.OrderItems.AnyAsync(oi => oi.ItemId == id);
+        var usedInRequests = await _db.StockRequestItems.AnyAsync(ri => ri.ItemId == id);
+        var usedOnTruck = await _db.TruckStocks.AnyAsync(s => s.ItemId == id && s.Quantity > 0);
+        var usedInDispatch = await _db.DispatchItems.AnyAsync(di => di.ItemId == id);
+        if (usedInOrders || usedInRequests || usedOnTruck || usedInDispatch)
+        {
+            var places = new List<string>();
+            if (usedInOrders) places.Add("customer orders");
+            if (usedInRequests) places.Add("stock requests");
+            if (usedOnTruck) places.Add("truck stock");
+            if (usedInDispatch) places.Add("dispatches");
+            return BadRequest(new MessageResponse(
+                $"This item is still used in {string.Join(", ", places)} and cannot be deactivated. Remove it from there first."));
+        }
+
         i.IsActive = false;   // soft delete; inventory batches & movements are preserved
         await _db.SaveChangesAsync();
         return NoContent();

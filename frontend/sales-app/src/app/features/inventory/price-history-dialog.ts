@@ -4,12 +4,14 @@ import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatPaginatorModule } from '@angular/material/paginator';
 import { ApiService } from '../../core/api.service';
 import { ItemPriceHistory, InventoryMovement } from '../../core/models';
+import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-price-history-dialog',
-  imports: [CurrencyPipe, DatePipe, MatDialogModule, MatTableModule, MatButtonModule, MatIconModule],
+  imports: [CurrencyPipe, DatePipe, MatDialogModule, MatTableModule, MatButtonModule, MatIconModule, MatPaginatorModule],
   template: `
     <h2 mat-dialog-title class="title-row">
       Price History — {{ data.name }}
@@ -27,6 +29,7 @@ import { ItemPriceHistory, InventoryMovement } from '../../core/models';
         </div>
 
         <h3>Batches (FIFO — oldest consumed first)</h3>
+        <div class="table-scroll">
         <table mat-table [dataSource]="h.batches" class="full">
           <ng-container matColumnDef="date"><th mat-header-cell *matHeaderCellDef>Received</th><td mat-cell *matCellDef="let b">{{ b.createdAt | date:'dd-MM-yyyy' }}</td></ng-container>
           <ng-container matColumnDef="received"><th mat-header-cell *matHeaderCellDef>Received</th><td mat-cell *matCellDef="let b">{{ b.received }}</td></ng-container>
@@ -37,9 +40,15 @@ import { ItemPriceHistory, InventoryMovement } from '../../core/models';
           <tr mat-header-row *matHeaderRowDef="columns"></tr>
           <tr mat-row *matRowDef="let row; columns: columns"></tr>
         </table>
+        </div>
         @if (!h.batches.length) { <div class="empty">No batches yet — fulfil an inventory request to record price-tagged stock.</div> }
+        @if (batchPager.total() > 0) {
+          <mat-paginator [length]="batchPager.total()" [pageSize]="batchPager.pageSize()" [pageIndex]="batchPager.pageIndex()"
+            [pageSizeOptions]="pageSizeOptions" (page)="batchPager.onPage($event)" showFirstLastButtons />
+        }
 
         <h3>Stock Movements (audit)</h3>
+        <div class="table-scroll">
         <table mat-table [dataSource]="movements()" class="full">
           <ng-container matColumnDef="mdate"><th mat-header-cell *matHeaderCellDef>Date</th><td mat-cell *matCellDef="let m">{{ m.createdAt | date:'dd-MM-yyyy' }}</td></ng-container>
           <ng-container matColumnDef="type"><th mat-header-cell *matHeaderCellDef>Type</th><td mat-cell *matCellDef="let m"><span [class]="m.type === 'IN' ? 'chip chip-ok' : 'chip chip-remaining'">{{ m.type }}</span>{{ m.reversed ? ' (reversed)' : '' }}</td></ng-container>
@@ -50,7 +59,12 @@ import { ItemPriceHistory, InventoryMovement } from '../../core/models';
           <tr mat-header-row *matHeaderRowDef="moveColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: moveColumns"></tr>
         </table>
+        </div>
         @if (!movements().length) { <div class="empty">No movements recorded yet.</div> }
+        @if (movePager.total() > 0) {
+          <mat-paginator [length]="movePager.total()" [pageSize]="movePager.pageSize()" [pageIndex]="movePager.pageIndex()"
+            [pageSizeOptions]="pageSizeOptions" (page)="movePager.onPage($event)" showFirstLastButtons />
+        }
       } @else {
         <div class="empty">Loading…</div>
       }
@@ -66,6 +80,9 @@ import { ItemPriceHistory, InventoryMovement } from '../../core/models';
     .summary .val { font-weight:600; font-size:1.1em; }
     h3 { margin: 12px 0 8px; }
     table { width:100%; }
+    /* Keep dates and reference numbers on a single line; the table scrolls
+       horizontally inside .table-scroll if it gets too wide for the dialog. */
+    th.mat-mdc-header-cell, td.mat-mdc-cell { white-space: nowrap; padding-right: 16px; }
     .note { color: var(--mat-sys-on-surface-variant); font-size:0.85em; margin-top:8px; }
   `
 })
@@ -77,8 +94,22 @@ export class PriceHistoryDialog implements OnInit {
   columns = ['date', 'received', 'remaining', 'price', 'value', 'source'];
   moveColumns = ['mdate', 'type', 'mqty', 'mcost', 'mtotal', 'msource'];
 
+  readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
+  batchPager = createServerPager(() => this.loadBatches());
+  movePager = createServerPager(() => this.loadMovements());
+
   ngOnInit() {
-    this.api.getItemPriceHistory(this.data.id).subscribe(h => this.history.set(h));
-    this.api.getItemMovements(this.data.id).subscribe(m => this.movements.set(m));
+    this.loadBatches();
+    this.loadMovements();
+  }
+
+  loadBatches() {
+    this.api.getItemPriceHistory(this.data.id, { page: this.batchPager.pageIndex() + 1, pageSize: this.batchPager.pageSize() })
+      .subscribe(h => { this.history.set(h); this.batchPager.total.set(h.batchesTotal); });
+  }
+
+  loadMovements() {
+    this.api.getItemMovements(this.data.id, { page: this.movePager.pageIndex() + 1, pageSize: this.movePager.pageSize() })
+      .subscribe(res => { this.movements.set(res.items); this.movePager.total.set(res.total); });
   }
 }
