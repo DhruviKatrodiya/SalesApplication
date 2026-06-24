@@ -71,7 +71,7 @@ public class AuthController : ControllerBase
         if (user is not null)
         {
             var otp = await _otp.GenerateAsync(req.Email);
-            await _email.SendOtpAsync(req.Email, otp);
+            _email.QueueOtp(req.Email, otp);   // sent in the background
         }
         return Ok(new MessageResponse("If the email exists, an OTP has been sent."));
     }

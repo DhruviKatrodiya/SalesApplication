@@ -23,9 +23,14 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
 // ---- Services ----
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<OtpService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 builder.Services.AddScoped<InventoryService>();
+
+// ---- Background email ----
+builder.Services.AddSingleton<IEmailQueue, EmailQueue>();         // producer/consumer queue
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();   // low-level SMTP send
+builder.Services.AddSingleton<IEmailService, EmailService>();     // enqueue facade (used by controllers)
+builder.Services.AddHostedService<EmailBackgroundService>();      // drains the queue off-thread
 
 // ---- Auth ----
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

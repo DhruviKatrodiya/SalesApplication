@@ -352,3 +352,291 @@ The Sales Application delivers an end-to-end, multi-tenant solution that unifies
 advances, restock requests, invoicing, and reporting into one secure web app. Built on a modern .NET 10
 + Angular 22 stack with a clean 3-tier architecture, it reduces manual effort and gives a small
 distributor real-time control and visibility over the entire sales operation.
+
+---
+
+# Appendix A — Advanced Functionality (Implementation Deep-Dive)
+
+This appendix details the non-trivial subsystems that distinguish the application from a basic CRUD app.
+
+## A.1 Background Email Service
+
+**Goal:** never block an HTTP request on SMTP. Sending the OTP or an invoice can take seconds (connect →
+TLS → auth → send); doing it inline would make `forgot-password` / `email invoice` slow and fragile.
+
+**Design — producer/consumer with a hosted worker** (`backend/SalesApp.Api/Services/`):
+- **`EmailMessage`** — a record `(To, Subject, Body, Attachment?, AttachmentName?)`.
+- **`IEmailQueue` / `EmailQueue`** — an **unbounded `System.Threading.Channels.Channel`** (singleton). `Enqueue`
+  uses `TryWrite`, so producers (controllers) never block.
+- **`IEmailService` / `EmailService`** — the app-facing **facade**. Controllers call `QueueOtp(...)` /
+  `QueueInvoice(...)`, which build the body and enqueue. Also exposes `IsConfigured` for a synchronous
+  pre-check (so the invoice endpoint can return an immediate 400 if SMTP is unset).
+- **`IEmailSender` / `SmtpEmailSender`** — the low-level MailKit send (text + optional PDF attachment). If
+  SMTP isn't configured it logs the message (dev fallback) instead of sending.
+- **`EmailBackgroundService : BackgroundService`** — a hosted worker that `await foreach`-es the channel
+  and sends each message, with **3 attempts, 10s apart**, then logs "giving up" (no crash).
+
+**Flow:** `Controller → EmailService.Queue* → EmailQueue (Channel) → EmailBackgroundService → SmtpEmailSender (SMTP)`.
+
+**Verified behaviour:** with SMTP pointed at a closed port, `forgot-password` returned in ~0.5s while the
+worker independently logged `attempt 1/3 → 2/3 → 3/3 → Giving up` for each queued message — proving the
+send is fully decoupled from the request and that retries work.
+
+> Note: the queue is in-memory (ideal for a single instance). For durability across restarts or
+> multi-instance deployments, back it with a DB table or a real broker — listed in Future Enhancements.
+
+## A.2 FIFO Batch-Costed Inventory
+
+**Goal:** track the *cost* of stock accurately (purchase price varies per lot) and keep a full audit of
+every movement, so cost-of-goods, stock value and reversibility are correct.
+
+**Entities:** `InventoryBatch` (a received lot: `InitialQuantity`, remaining `Quantity`, `PurchasePrice`,
+`CreatedAt`) and `InventoryTransaction` (an immutable ledger row: `Type` In/Out, `Quantity`, `UnitCost`,
+`TotalCost`, `RefType`/`RefId`, `Reversed`).
+
+**`InventoryService` operations:**
+- **`ReceiveAsync(item, qty, price, …)`** — adds a **new price-tagged batch** (lots are never merged), bumps
+  `Item.StockQuantity`, and writes an **IN** transaction. Used when a stock request is fulfilled.
+- **`ConsumeFifoAsync(item, qty, …)`** — consumes oldest-batch-first (`OrderBy CreatedAt, Id`), decrementing
+  each batch's remaining quantity, writing an **OUT** transaction per batch, and **returning COGS** (sum of
+  `take × batch.PurchasePrice`). Throws if total available across batches is insufficient.
+- **`ReverseAsync(refType, refId)`** — restores batch quantities and item stock for all non-reversed OUT rows
+  of a document (used when an order is **cancelled/edited**), marking them `Reversed = true`.
+- **`EnsureOpeningBatchAsync(item)`** — backfills an "opening" batch for legacy/imported stock not yet
+  represented by batches, so FIFO math always balances.
+
+**Why it matters:** order fulfilment draws stock FIFO and captures the true cost of those exact units;
+cancelling an order precisely returns the same units to their batches. The ledger gives an auditable
+history (exposed via `GET /items/{id}/movements` and `GET /items/{id}/price-history`).
+
+## A.3 Payments, Customer Advances & Settlement
+
+**Goal:** model partial payments, full settlement, and **overpayments that become a reusable customer
+advance** — with money conserved across the customer's orders.
+
+**`OrderMath` (the single source of truth for payment math):**
+- **`Recalculate(order)`** — `PaidAmount = Σ payments`; `RemainingAmount = max(0, Total − Paid)` (never
+  negative). Status:
+  - `Paid` when fully paid; `Pending` when nothing paid;
+  - **`Advance`** when partially paid *before* dispatch; **`Partial`** when partially paid *after*
+    dispatch/delivery.
+- **`OverpaidOn(order)`** — the part of an order's payment that exceeds its total (for a **cancelled** order,
+  the *entire* paid amount becomes credit, since the order is void).
+- **`AdvanceBalance(orders)`** — `Σ OverpaidOn` across the customer's orders = the available advance.
+
+**`apply-advance/{orderId}` (money-conserving transfer):** computes the customer's available advance, the
+target order's remaining due, and `toApply = min(advance, remaining[, requestedAmount])`. It then **pulls**
+that amount out of the source orders holding the overpayment (negative `Payment` rows, method
+`AdvanceTransfer`, oldest first) and **adds** a matching positive `Payment` (method `Advance`) to the target —
+so total cash recorded is unchanged, it's just reallocated. Advance entries can't be deleted directly.
+
+**`settle/{orderId}`** records a single payment for the exact remaining balance (one-click "mark paid").
+
+**Cancellation tie-in:** cancelling an order both **reverses its stock** (A.2) and turns its paid amount into
+advance the customer can apply elsewhere (A.3).
+
+> The same payment/advance pattern is mirrored for **Stock Requests** ("My Orders") via
+> `StockRequestPayment` and the `stock-request-payments/*` endpoints.
+
+## A.4 Trucks & Dispatch (two stock buckets)
+
+**Goal:** move stock from the godown onto a specific truck, keep both the **per‑truck** stock and the
+**godown** stock correct, and make every dispatch reversible.
+
+**Two buckets per item:** `Item.StockQuantity` (godown) and `Item.DispatchStock` (aggregate on all trucks),
+with the authoritative per‑truck breakdown in **`TruckStock`** (`TruckId`, `ItemId`, `Quantity`).
+
+**Recording a dispatch (`POST /dispatch`):**
+1. Validate godown availability for every line (fail fast — nothing is changed yet).
+2. Resolve the truck by label, **auto‑registering** a `Truck` if that label is new.
+3. **Consolidate per truck per day** — if a dispatch for the same truck already exists today, merge into it
+   (same items sum their quantities) so each truck has one entry per day.
+4. Save the dispatch *shell first* to get its `Id`, then for each line:
+   `ConsumeFifoAsync(item, qty, "Dispatch", dispatchId, truck)` (FIFO godown draw + ledger + COGS) →
+   `item.DispatchStock += qty` → add to the truck's `TruckStock` → add/sum the `DispatchItem`.
+
+**Reversal (`ReverseDispatchStockAsync`)** — used by **edit**, **soft‑delete**, and re‑apply: if the FIFO OUT
+movements are linked to the dispatch it calls `InventoryService.ReverseAsync("Dispatch", id)` (restores exact
+batch quantities + godown stock); it also subtracts from `DispatchStock` and the truck's `TruckStock`. (Legacy
+dispatches with no movement link are restored by adding the quantity straight back to godown.)
+
+- **Edit (`PUT`)** validates against *godown + quantity this dispatch already holds*, reverses, then re‑applies.
+- **Soft‑delete (`DELETE`)** reverses the stock and sets `IsActive = false`; **activate** re‑validates godown
+  and re‑loads the truck (FIFO).
+- **Draft cart** — an unsaved dispatch is persisted per user in `DispatchDraft` (`TruckLabel`, `Notes`,
+  `ItemsJson`) via `GET/PUT/DELETE /dispatch/draft`; the UI debounce‑saves it and clears it after recording.
+
+**Order stock sourcing (tie‑in):** an order's `Source` decides which bucket it draws from:
+- **`Inventory`** → `ConsumeFifoAsync(item, qty, "Order", orderId, …)` against godown stock.
+- **`Dispatch`** → consumes from the **selected truck's `TruckStock`** (and decrements `DispatchStock`); it does
+  *not* FIFO‑draw godown again, because those units were already FIFO‑consumed when dispatched. The order stores
+  its `TruckId`. Editing/cancelling reverses the matching bucket.
+
+## A.5 Stock Request Fulfilment ("My Orders")
+
+**Goal:** let a salesperson requisition restock, track its payment, and **add the received goods to inventory**
+as new priced batches when fulfilled.
+
+**Lifecycle:** `Pending → Fulfilled → Done` (or `Cancelled`). Numbers are monthly‑sequenced `REQ-YYYY-MM-NNNNNN`.
+
+- **Create/Edit** (only while `Pending`) build the lines from item prices (or an entered override) and
+  `RecalcPayment` (partial pay reads as **Advance** pre‑fulfilment).
+- **Fulfill (`PUT {id}/fulfill`)** — for each line `InventoryService.ReceiveAsync(item, qty, unitPrice,
+  "Fulfill", requestId, …)` creates a **new price‑tagged FIFO batch** (+IN ledger row) and bumps godown stock;
+  the item's display `UnitPrice` is updated to the latest (history preserved in batches). Status → `Fulfilled`
+  (partial pay now reads as **Partial**).
+- **Done** closes a fulfilled request; **Cancel** — if it was already `Fulfilled`, it removes the batches this
+  request created, subtracting only their **still‑remaining** quantity from stock (already‑consumed units stay
+  accounted for) and depleting the batches to 0 (kept for audit).
+- Payments/advances mirror the order side exactly (`RecalcPayment`, `OverpaidOn`, `AdvanceBalance`,
+  `apply-advance`) through `StockRequestPaymentsController`.
+
+## A.6 Key Flows (Sequence Diagrams)
+
+**Background email (non‑blocking):**
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant Ctrl as Controller
+    participant Q as EmailQueue (Channel)
+    participant W as EmailBackgroundService
+    participant S as SMTP
+    C->>Ctrl: POST /auth/forgot-password
+    Ctrl->>Q: QueueOtp(...) (enqueue)
+    Ctrl-->>C: 200 OK (instant)
+    W->>Q: await ReadAllAsync()
+    W->>S: send (retry 3x / 10s)
+    S-->>W: ok / fail → log
+```
+
+**Create order — Inventory source (FIFO):**
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant O as OrdersController
+    participant Inv as InventoryService
+    participant DB as SQL Server
+    C->>O: POST /orders (Source=Inventory)
+    O->>O: validate godown availability
+    O->>Inv: ConsumeFifoAsync(item, qty, "Order")
+    Inv->>DB: decrement oldest batches + write OUT ledger
+    Inv-->>O: COGS
+    O->>DB: save order + items, OrderMath.Recalculate
+    O-->>C: 201 OrderDto
+```
+
+**Record dispatch (godown → truck):**
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant D as DispatchController
+    participant Inv as InventoryService
+    C->>D: POST /dispatch (truck, items)
+    D->>D: validate godown; resolve/auto-register truck; merge same-day
+    D->>Inv: ConsumeFifoAsync(item, qty, "Dispatch")
+    Inv-->>D: godown ↓ + OUT ledger
+    D->>D: DispatchStock ↑, TruckStock ↑
+    D-->>C: 201 DispatchDto
+```
+
+**Apply customer advance (money‑conserving):**
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant P as PaymentsController
+    C->>P: POST /payments/apply-advance/{orderId}
+    P->>P: advance = Σ OverpaidOn(customer orders)
+    P->>P: toApply = min(advance, remaining[, amount])
+    P->>P: source orders += -take (AdvanceTransfer)
+    P->>P: target order += +toApply (Advance)
+    P->>P: Recalculate all touched orders
+    P-->>C: 200 OrderDto
+```
+
+**Fulfil stock request:**
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant R as StockRequestsController
+    participant Inv as InventoryService
+    C->>R: PUT /stock-requests/{id}/fulfill
+    R->>Inv: ReceiveAsync(item, qty, price, "Fulfill")
+    Inv-->>R: new price-tagged batch + IN ledger, godown ↑
+    R->>R: status = Fulfilled, RecalcPayment
+    R-->>C: 200 StockRequestDto
+```
+
+---
+
+# Appendix B — Application Walkthrough (Screenshots)
+
+The screens below illustrate the end-to-end workflow, captured from the running application.
+
+### 1. Login
+Secure JWT login (with show/hide password); password recovery via email OTP.
+
+![Login](screenshots/01-login.png)
+
+### 2. Dashboard
+At-a-glance KPIs — items in catalog, low-stock count, customers, pending orders, total sales and outstanding balance — plus quick actions.
+
+![Dashboard](screenshots/02-dashboard.png)
+
+### 3. Categories & Sub-categories
+Dual-pane management of the product hierarchy with search, active/inactive filtering and soft-delete.
+
+![Categories](screenshots/03-categories.png)
+
+### 4. Inventory
+Items with godown and on-truck stock, unit price, SKU, low-stock filter, and per-item price history & movement ledger.
+
+![Inventory](screenshots/04-inventory.png)
+
+### 5. Dispatch (Truck)
+Load godown stock onto a truck — a draft cart, per-truck/day consolidation, stock validation, and reversible history.
+
+![Dispatch](screenshots/05-dispatch.png)
+
+### 6. Customers
+Customer directory with route assignment, search, and a 360° detail view (totals, advance, pending vs delivered, orders).
+
+![Customers](screenshots/06-customers.png)
+
+### 7. Customer Orders
+Order list with filters (order #, customer, date, delivery status, paid status), status/payment chips, and pagination.
+
+![Orders](screenshots/07-orders.png)
+
+### 8. New Order
+Create an order from godown (*Inventory*) or truck (*Dispatch*) stock — customer, delivery date, items, and live total.
+
+![New Order](screenshots/13-new-order-dialog.png)
+
+### 9. Reports
+Daily / monthly / yearly sales breakdowns and a per-customer pending-vs-delivered & outstanding summary.
+
+![Reports](screenshots/08-reports.png)
+
+### 10. My Orders (Stock Requests)
+The salesperson's own restock requisitions with payment tracking and a fulfil → done workflow.
+
+![My Orders](screenshots/09-my-orders.png)
+
+### 11. Trucks
+Managed trucks, each with its own per-item stock.
+
+![Trucks](screenshots/10-trucks.png)
+
+### 12. Routes
+Delivery routes that customers are grouped under.
+
+![Routes](screenshots/11-routes.png)
+
+### 13. Profile
+Editable profile (name, **email**, phone) with **profile-image upload** and change-password.
+
+![Profile](screenshots/12-profile.png)
+
+> Screenshots live in `docs/screenshots/` and were captured from the running app
+> (`http://localhost:4200`). Re-run the capture after UI changes to refresh them.
+

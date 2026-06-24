@@ -478,6 +478,9 @@ public class OrdersController : ControllerBase
         if (string.IsNullOrWhiteSpace(email))
             return BadRequest(new MessageResponse("This customer has no email address on file. Add one and try again."));
 
+        if (!_email.IsConfigured)
+            return BadRequest(new MessageResponse("Email is not configured on the server."));
+
         byte[] pdf;
         try { pdf = _invoices.Generate(order); }
         catch (Exception ex)
@@ -486,20 +489,9 @@ public class OrdersController : ControllerBase
             return StatusCode(500, new MessageResponse("Could not generate the invoice PDF."));
         }
 
-        try
-        {
-            await _email.SendInvoiceAsync(email!, order.Customer!.Name, order.OrderNumber, pdf);
-            return Ok(new MessageResponse($"Invoice emailed to {email}."));
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new MessageResponse(ex.Message));   // e.g. SMTP not configured
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to email invoice for order {Id}", id);
-            return StatusCode(502, new MessageResponse("Failed to send the invoice email. Please try again later."));
-        }
+        // Queue the email; the background worker delivers it (with retries).
+        _email.QueueInvoice(email!, order.Customer!.Name, order.OrderNumber, pdf);
+        return Ok(new MessageResponse($"Invoice will be emailed to {email} shortly."));
     }
 
     private async Task<string> GenerateOrderNumberAsync()
