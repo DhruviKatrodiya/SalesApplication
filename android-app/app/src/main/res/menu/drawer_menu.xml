@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:checkableBehavior="single">
+        <item android:id="@+id/nav_dashboard" android:title="Dashboard" />
+        <item android:id="@+id/nav_categories" android:title="Categories" />
+        <item android:id="@+id/nav_subcategories" android:title="Sub-categories" />
+        <item android:id="@+id/nav_inventory" android:title="Inventory" />
+        <item android:id="@+id/nav_dispatch" android:title="Dispatch" />
+        <item android:id="@+id/nav_trucks" android:title="Trucks" />
+        <item android:id="@+id/nav_customers" android:title="Customers" />
+        <item android:id="@+id/nav_routes" android:title="Routes" />
+        <item android:id="@+id/nav_orders" android:title="Customer Orders" />
+        <item android:id="@+id/nav_my_orders" android:title="My Orders" />
+        <item android:id="@+id/nav_reports" android:title="Reports" />
+        <item android:id="@+id/nav_profile" android:title="Profile" />
+    </group>
+
+    <item android:title="Account">
+        <menu>
+            <item android:id="@+id/nav_connection" android:title="Connection settings" />
+            <item android:id="@+id/nav_logout" android:title="Sign out" />
+        </menu>
+    </item>
+</menu>
