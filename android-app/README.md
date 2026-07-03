@@ -1,39 +1,33 @@
-# Sales App — Android (Kotlin, direct SQL Server)
+# Sales App — Android (Kotlin, fully offline / local storage)
 
-A native Android client for the existing `SalesAppDb` SQL Server database. It replaces the
-.NET Web API + Angular frontend with a phone app that connects **directly** to SQL Server over
-the network via JDBC (jTDS). All business logic that used to live in the API controllers is
-reimplemented in Kotlin **repository** classes.
+A native Android app that stores **all data locally on the device** in a SQLite database — no server,
+no network, no backend. It reimplements the business logic of the original .NET Web API in Kotlin
+**repository** classes running against on-device SQLite. Data access goes through a lightweight JDBC
+driver ([SQLDroid](https://github.com/SQLDroid/SQLDroid)) so the repositories keep clean
+`PreparedStatement` SQL.
 
 - **Language / UI:** Kotlin + XML Views + Material 3
-- **Data access:** [jTDS](http://jtds.sourceforge.net/) JDBC driver → SQL Server (no backend API)
-- **Auth:** login validated against `Users.PasswordHash` (BCrypt, via jBCrypt)
-- **Storage of connection details:** encrypted on-device (`EncryptedSharedPreferences`)
+- **Data storage:** on-device **SQLite** (`salesapp.db` in the app's private storage) — fully offline
+- **Auth:** login validated against the local `Users` table (BCrypt via jBCrypt)
+- **First launch:** the schema is created automatically and a default user is seeded
 
-> ⚠️ This is **not** a truly offline/backendless design. The phone must be able to reach a
-> running SQL Server. If you want a fully offline app, the alternative is on-device SQLite/Room
-> (see the conversation notes). This build follows the "connect to SQL Server directly" choice.
+> ✅ Truly offline. No SQL Server, no connection setup, no permissions beyond storage. The database
+> lives inside the app sandbox; uninstalling the app removes it.
 
-## Prerequisites on the SQL Server host
-1. **Enable TCP/IP** in *SQL Server Configuration Manager* → Protocols → TCP/IP → Enabled, restart the service.
-2. Open **port 1433** on the Windows firewall (inbound).
-3. Create a **SQL Server login** (Mixed Mode auth) with a username + password and grant it access to
-   `SalesAppDb`. The app **cannot** use `Trusted_Connection` (Windows auth).
-4. Make sure the database exists — run the existing .NET backend once (it applies EF migrations and
-   seeds the default user `sales@salesapp.com` / `Sales@123`), or restore the schema another way.
-
-## Networking
-- **Android emulator:** host machine is reachable at `10.0.2.2` (use that as the Host).
-- **Physical device:** use the PC's LAN IP (e.g. `192.168.1.x`), same Wi-Fi network.
+## Default login (seeded on first launch)
+| Email | Password |
+|-------|----------|
+| `sales@salesapp.com` | `Sales@123` |
 
 ## Build & run
-1. Open the `android-app/` folder in **Android Studio** (Giraffe+). It will generate
-   `local.properties` (SDK path) and the Gradle wrapper jar automatically.
-   - From a terminal with Gradle installed you can also run `gradle wrapper` once to create `gradlew`.
-2. Build & run on a device/emulator.
-3. On first launch tap **Connection settings**, enter Host / Port / Database / SQL user / password,
-   **Test connection**, then **Save**.
-4. Sign in with your SQL `Users` credentials (e.g. the seeded `sales@salesapp.com` / `Sales@123`).
+1. Open the `android-app/` folder in **Android Studio**. It generates `local.properties` (SDK path)
+   and the Gradle wrapper on first sync, and downloads dependencies.
+2. Build & run on any emulator or device (minSdk 24). No configuration needed.
+3. Sign in with the seeded credentials above (changeable in Profile → Change password).
+
+### Command-line build
+With JDK 17 + Android SDK installed and `ANDROID_HOME` set, from `android-app/`:
+`gradle assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Implementation status
 Built incrementally, mirroring the API controllers:
@@ -41,7 +35,7 @@ Built incrementally, mirroring the API controllers:
 | Area | Status |
 |------|--------|
 | Project scaffold, theme, launcher | ✅ |
-| SQL Server connection layer + settings screen | ✅ |
+| Local SQLite database (schema + auto-seed on first launch) | ✅ |
 | Auth (login, session, BCrypt) | ✅ |
 | Navigation drawer shell | ✅ |
 | **Categories** (list / search / add / edit / soft-delete / activate) | ✅ |

@@ -6,7 +6,7 @@ import com.salesapp.mobile.data.Db
 class SalesApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // Load saved SQL Server connection details (if the user has configured them).
-        Db.loadConfig(this)
+        // Create the local SQLite database + schema and seed the default user (first launch).
+        Db.init(this)
     }
 }

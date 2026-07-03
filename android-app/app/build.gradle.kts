@@ -49,12 +49,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // Direct SQL Server access — jTDS is the JDBC driver that works on Android/Dalvik.
-    implementation("net.sourceforge.jtds:jtds:1.3.1")
+    // On-device SQLite via a JDBC driver, so the repositories keep their PreparedStatement code.
+    // Fully local storage — no server, no network.
+    implementation("org.sqldroid:sqldroid:1.0.3")
 
-    // BCrypt — reads the $2a$ hashes produced by BCrypt.Net on the backend.
+    // BCrypt for hashing the local login password.
     implementation("org.mindrot:jbcrypt:0.4")
-
-    // Encrypted storage for the saved DB connection + session.
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

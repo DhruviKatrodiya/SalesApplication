@@ -98,13 +98,13 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnConnection"
-            style="@style/Widget.Material3.Button.TextButton"
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:textColor="@color/white"
-            android:text="Connection settings" />
+            android:textColor="#CCFFFFFF"
+            android:textSize="12sp"
+            android:gravity="center"
+            android:text="Default login: sales@salesapp.com / Sales@123" />
     </LinearLayout>
 </ScrollView>

@@ -5,12 +5,10 @@ import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.salesapp.mobile.data.Db
 import com.salesapp.mobile.data.Session
 import com.salesapp.mobile.data.repo.AuthRepository
 import com.salesapp.mobile.databinding.ActivityLoginBinding
 import com.salesapp.mobile.ui.main.MainActivity
-import com.salesapp.mobile.ui.settings.ConnectionSettingsActivity
 import kotlinx.coroutines.launch
 
 class LoginActivity : AppCompatActivity() {
@@ -22,17 +20,13 @@ class LoginActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(b.root)
-
-        b.btnConnection.setOnClickListener {
-            startActivity(Intent(this, ConnectionSettingsActivity::class.java))
-        }
         b.btnLogin.setOnClickListener { attemptLogin() }
     }
 
     override fun onResume() {
         super.onResume()
-        // If the DB is set up and we have a remembered session, restore it and skip login.
-        if (Db.isConfigured() && !Session.isLoggedIn()) {
+        // Restore a remembered session and skip the login screen.
+        if (!Session.isLoggedIn()) {
             Session.rememberedUserId(this)?.let { restoreSession(it) }
         }
     }
@@ -40,10 +34,7 @@ class LoginActivity : AppCompatActivity() {
     private fun restoreSession(userId: Int) {
         lifecycleScope.launch {
             val user = runCatching { auth.findById(userId) }.getOrNull()
-            if (user != null) {
-                Session.signIn(this@LoginActivity, user)
-                goToMain()
-            }
+            if (user != null) { Session.signIn(this@LoginActivity, user); goToMain() }
         }
     }
 
@@ -51,31 +42,20 @@ class LoginActivity : AppCompatActivity() {
         val email = b.etEmail.text?.toString()?.trim().orEmpty()
         val password = b.etPassword.text?.toString().orEmpty()
         b.tvError.text = ""
-
-        if (!Db.isConfigured()) {
-            b.tvError.text = "Set up the SQL Server connection first."
-            startActivity(Intent(this, ConnectionSettingsActivity::class.java))
-            return
-        }
         if (email.isEmpty() || password.isEmpty()) {
             b.tvError.text = "Enter your email and password."
             return
         }
-
         busy(true)
         lifecycleScope.launch {
             val result = runCatching { auth.login(email, password) }
             busy(false)
             result.fold(
                 onSuccess = { user ->
-                    if (user == null) {
-                        b.tvError.text = "Invalid email or password."
-                    } else {
-                        Session.signIn(this@LoginActivity, user)
-                        goToMain()
-                    }
+                    if (user == null) b.tvError.text = "Invalid email or password."
+                    else { Session.signIn(this@LoginActivity, user); goToMain() }
                 },
-                onFailure = { b.tvError.text = "Connection error: ${it.message}" },
+                onFailure = { b.tvError.text = "Error: ${it.message}" },
             )
         }
     }

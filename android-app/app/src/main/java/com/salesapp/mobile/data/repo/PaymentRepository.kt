@@ -4,15 +4,11 @@ import com.salesapp.mobile.data.Db
 import com.salesapp.mobile.data.Session
 import com.salesapp.mobile.data.models.OrderStatus
 import com.salesapp.mobile.data.models.Payment
-import java.math.BigDecimal
 import java.sql.Connection
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Payments ledger, mirroring PaymentsController. Every mutation recomputes the order's
- * paid/remaining/status via [OrderMath]. Advance handling conserves money across a customer's orders.
- */
+/** Payments ledger (local SQLite), mirroring PaymentsController. Recomputes the order via OrderMath. */
 class PaymentRepository {
 
     suspend fun byOrder(orderId: Int): List<Payment> = Db.withConnection { conn ->
@@ -24,10 +20,8 @@ class PaymentRepository {
                 buildList {
                     while (rs.next()) add(
                         Payment(
-                            id = rs.getInt("Id"), orderId = rs.getInt("OrderId"),
-                            amount = rs.getBigDecimal("Amount")?.toDouble() ?: 0.0,
-                            paymentDate = rs.getString("PaymentDate"),
-                            method = rs.getString("Method"), note = rs.getString("Note"),
+                            id = rs.getInt("Id"), orderId = rs.getInt("OrderId"), amount = rs.getDouble("Amount"),
+                            paymentDate = rs.getString("PaymentDate"), method = rs.getString("Method"), note = rs.getString("Note"),
                         )
                     )
                 }
@@ -35,19 +29,18 @@ class PaymentRepository {
         }
     }
 
-    suspend fun add(orderId: Int, amount: Double, method: String?, note: String?, paymentDate: String? = null): Result<Unit> =
-        Db.withConnection { conn ->
-            val h = header(conn, orderId) ?: return@withConnection Result.failure(IllegalArgumentException("Order not found."))
-            if (h.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("You can only manage payments for your own orders."))
-            if (h.status == OrderStatus.Cancelled) return@withConnection Result.failure(IllegalStateException("This order is cancelled."))
-            if (amount <= 0) return@withConnection Result.failure(IllegalArgumentException("Amount must be greater than zero."))
-            conn.autoCommit = false
-            try {
-                insertPayment(conn, orderId, amount, method, note, paymentDate)
-                OrderMath.recalculate(conn, orderId)
-                conn.commit(); Result.success(Unit)
-            } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
-        }
+    suspend fun add(orderId: Int, amount: Double, method: String?, note: String?, paymentDate: String? = null): Result<Unit> = Db.withConnection { conn ->
+        val h = header(conn, orderId) ?: return@withConnection Result.failure(IllegalArgumentException("Order not found."))
+        if (h.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("You can only manage payments for your own orders."))
+        if (h.status == OrderStatus.Cancelled) return@withConnection Result.failure(IllegalStateException("This order is cancelled."))
+        if (amount <= 0) return@withConnection Result.failure(IllegalArgumentException("Amount must be greater than zero."))
+        conn.autoCommit = false
+        try {
+            insertPayment(conn, orderId, amount, method, note, paymentDate)
+            OrderMath.recalculate(conn, orderId)
+            conn.commit(); Result.success(Unit)
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
+    }
 
     suspend fun settle(orderId: Int): Result<Unit> = Db.withConnection { conn ->
         val h = header(conn, orderId) ?: return@withConnection Result.failure(IllegalArgumentException("Order not found."))
@@ -55,7 +48,7 @@ class PaymentRepository {
         if (h.status == OrderStatus.Cancelled) return@withConnection Result.failure(IllegalStateException("This order is cancelled."))
         conn.autoCommit = false
         try {
-            val remaining = h.total - paidOf(conn, orderId)
+            val remaining = Sql.round2(h.total - paidOf(conn, orderId))
             if (remaining > 0) insertPayment(conn, orderId, remaining, "Settlement", "Full settlement", null)
             OrderMath.recalculate(conn, orderId)
             conn.commit(); Result.success(Unit)
@@ -78,7 +71,6 @@ class PaymentRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    /** Apply the customer's advance balance to an order (money conserved across orders). */
     suspend fun applyAdvance(orderId: Int, amount: Double? = null): Result<Unit> = Db.withConnection { conn ->
         val target = header(conn, orderId) ?: return@withConnection Result.failure(IllegalArgumentException("Order not found."))
         if (target.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("You can only manage payments for your own orders."))
@@ -93,11 +85,7 @@ class PaymentRepository {
         ).use { ps ->
             ps.setInt(1, target.customerId)
             ps.executeQuery().use { rs ->
-                buildList {
-                    while (rs.next()) add(Row(
-                        rs.getInt(1), rs.getString(2), OrderStatus.from(rs.getInt(3)),
-                        rs.getBigDecimal(4)?.toDouble() ?: 0.0, rs.getBigDecimal(5)?.toDouble() ?: 0.0))
-                }
+                buildList { while (rs.next()) add(Row(rs.getInt(1), rs.getString(2), OrderStatus.from(rs.getInt(3)), rs.getDouble(4), rs.getDouble(5))) }
             }
         }
         fun overpaid(r: Row) = OrderMath.overpaidOn(r.status, r.total, r.paid)
@@ -124,16 +112,11 @@ class PaymentRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    // ---- internals ----
-
     private data class Header(val salesmanId: Int, val customerId: Int, val status: OrderStatus, val total: Double, val orderNumber: String)
     private fun header(conn: Connection, orderId: Int): Header? =
         conn.prepareStatement("SELECT SalesmanId, CustomerId, Status, TotalAmount, OrderNumber FROM Orders WHERE Id = ?").use { ps ->
             ps.setInt(1, orderId)
-            ps.executeQuery().use {
-                if (!it.next()) null
-                else Header(it.getInt(1), it.getInt(2), OrderStatus.from(it.getInt(3)), it.getBigDecimal(4)?.toDouble() ?: 0.0, it.getString(5) ?: "")
-            }
+            ps.executeQuery().use { if (!it.next()) null else Header(it.getInt(1), it.getInt(2), OrderStatus.from(it.getInt(3)), it.getDouble(4), it.getString(5) ?: "") }
         }
 
     private fun ownsOrder(conn: Connection, orderId: Int): Boolean =
@@ -143,16 +126,14 @@ class PaymentRepository {
 
     private fun paidOf(conn: Connection, orderId: Int): Double =
         conn.prepareStatement("SELECT COALESCE(SUM(Amount),0) FROM Payments WHERE OrderId = ?").use { ps ->
-            ps.setInt(1, orderId); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 }
+            ps.setInt(1, orderId); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 }
         }
 
     private fun insertPayment(conn: Connection, orderId: Int, amount: Double, method: String?, note: String?, paymentDate: String?) {
-        val dateExpr = if (paymentDate.isNullOrBlank()) "SYSUTCDATETIME()" else "?"
-        conn.prepareStatement(
-            "INSERT INTO Payments (OrderId, Amount, PaymentDate, Method, Note) VALUES (?, ?, $dateExpr, ?, ?)"
-        ).use { ps ->
+        val dateExpr = if (paymentDate.isNullOrBlank()) "datetime('now')" else "?"
+        conn.prepareStatement("INSERT INTO Payments (OrderId, Amount, PaymentDate, Method, Note) VALUES (?, ?, $dateExpr, ?, ?)").use { ps ->
             var i = 1
-            ps.setInt(i++, orderId); ps.setBigDecimal(i++, BigDecimal.valueOf(amount))
+            ps.setInt(i++, orderId); ps.setDouble(i++, Sql.round2(amount))
             if (!paymentDate.isNullOrBlank()) ps.setString(i++, paymentDate)
             ps.setString(i++, method); ps.setString(i, note)
             ps.executeUpdate()

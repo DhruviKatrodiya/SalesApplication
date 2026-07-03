@@ -27,7 +27,7 @@ class DashboardRepository {
         val pendingOrders = count("SELECT COUNT(*) FROM Orders WHERE SalesmanId = ? AND IsActive = 1 AND Status NOT IN (2,3,5)")
         val outstanding = conn.prepareStatement(
             "SELECT COALESCE(SUM(RemainingAmount),0) FROM Orders WHERE SalesmanId = ? AND IsActive = 1 AND Status <> 5"
-        ).use { ps -> ps.setInt(1, uid); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 } }
+        ).use { ps -> ps.setInt(1, uid); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 } }
         val pendingRequests = count("SELECT COUNT(*) FROM StockRequests WHERE SalesmanId = ? AND IsActive = 1 AND Status = 0")
         DashboardStats(activeItems, lowStock, customers, pendingOrders, outstanding, pendingRequests)
     }

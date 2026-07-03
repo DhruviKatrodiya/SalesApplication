@@ -23,7 +23,6 @@ import com.salesapp.mobile.ui.routes.RoutesFragment
 import com.salesapp.mobile.ui.subcategories.SubCategoriesFragment
 import com.salesapp.mobile.ui.trucks.TrucksFragment
 import com.salesapp.mobile.ui.login.LoginActivity
-import com.salesapp.mobile.ui.settings.ConnectionSettingsActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -75,7 +74,6 @@ class MainActivity : AppCompatActivity() {
             R.id.nav_my_orders -> show(MyOrdersFragment(), "My Orders")
             R.id.nav_reports -> show(ReportsFragment(), "Reports")
             R.id.nav_profile -> show(ProfileFragment(), "Profile")
-            R.id.nav_connection -> startActivity(Intent(this, ConnectionSettingsActivity::class.java))
             R.id.nav_logout -> logout()
         }
         b.drawerLayout.closeDrawer(GravityCompat.START)

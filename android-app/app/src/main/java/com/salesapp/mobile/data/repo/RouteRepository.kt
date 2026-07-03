@@ -6,7 +6,7 @@ import com.salesapp.mobile.data.models.DeliveryRoute
 import com.salesapp.mobile.data.models.Paged
 import java.sql.PreparedStatement
 
-/** CRUD for delivery routes (table `Routes`), mirroring RoutesController. Customers keep their route on delete. */
+/** CRUD for delivery routes (local SQLite). Customers keep their route on delete. */
 class RouteRepository {
 
     suspend fun list(
@@ -31,7 +31,7 @@ class RouteRepository {
             FROM Routes r
             $where
             ORDER BY r.CreatedAt DESC, r.Id DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            LIMIT ?, ?
         """.trimIndent()
         val items = conn.prepareStatement(sql).use { ps ->
             val n = bind(ps, args); ps.setInt(n, (safePage - 1) * pageSize); ps.setInt(n + 1, pageSize)
@@ -39,10 +39,8 @@ class RouteRepository {
                 buildList {
                     while (rs.next()) add(
                         DeliveryRoute(
-                            id = rs.getInt("Id"),
-                            name = rs.getString("Name") ?: "",
-                            description = rs.getString("Description"),
-                            customerCount = rs.getInt("CustCount"),
+                            id = rs.getInt("Id"), name = rs.getString("Name") ?: "",
+                            description = rs.getString("Description"), customerCount = rs.getInt("CustCount"),
                             isActive = rs.getBoolean("IsActive"),
                         )
                     )
@@ -54,18 +52,17 @@ class RouteRepository {
 
     suspend fun create(name: String, description: String?): Int = Db.withConnection { conn ->
         conn.prepareStatement(
-            "INSERT INTO Routes (UserId, Name, Description, CreatedAt, IsActive) " +
-                "OUTPUT INSERTED.Id VALUES (?, ?, ?, SYSUTCDATETIME(), 1)"
+            "INSERT INTO Routes (UserId, Name, Description, CreatedAt, IsActive) VALUES (?, ?, ?, datetime('now'), 1)"
         ).use { ps ->
-            ps.setInt(1, Session.userId); ps.setString(2, name.trim()); ps.setString(3, description?.trim())
-            ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
+            ps.setInt(1, Session.userId); ps.setString(2, name.trim()); ps.setString(3, description?.trim()); ps.executeUpdate()
         }
+        Sql.lastInsertId(conn)
     }
 
     suspend fun update(id: Int, name: String, description: String?): Boolean = Db.withConnection { conn ->
         conn.prepareStatement("UPDATE Routes SET Name = ?, Description = ? WHERE Id = ? AND UserId = ?").use { ps ->
-            ps.setString(1, name.trim()); ps.setString(2, description?.trim())
-            ps.setInt(3, id); ps.setInt(4, Session.userId); ps.executeUpdate() > 0
+            ps.setString(1, name.trim()); ps.setString(2, description?.trim()); ps.setInt(3, id); ps.setInt(4, Session.userId)
+            ps.executeUpdate() > 0
         }
     }
 

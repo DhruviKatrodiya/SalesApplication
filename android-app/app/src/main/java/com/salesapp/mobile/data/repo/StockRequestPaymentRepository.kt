@@ -3,12 +3,11 @@ package com.salesapp.mobile.data.repo
 import com.salesapp.mobile.data.Db
 import com.salesapp.mobile.data.Session
 import com.salesapp.mobile.data.models.StockRequestPayment
-import java.math.BigDecimal
 import java.sql.Connection
 import kotlin.math.max
 import kotlin.math.min
 
-/** Payments against a salesperson's own stock requests, mirroring StockRequestPaymentsController. */
+/** Payments against a salesperson's own stock requests (local SQLite). */
 class StockRequestPaymentRepository {
 
     suspend fun byRequest(requestId: Int): List<StockRequestPayment> = Db.withConnection { conn ->
@@ -20,10 +19,8 @@ class StockRequestPaymentRepository {
                 buildList {
                     while (rs.next()) add(
                         StockRequestPayment(
-                            id = rs.getInt("Id"), stockRequestId = rs.getInt("StockRequestId"),
-                            amount = rs.getBigDecimal("Amount")?.toDouble() ?: 0.0,
-                            paymentDate = rs.getString("PaymentDate"),
-                            method = rs.getString("Method"), note = rs.getString("Note"),
+                            id = rs.getInt("Id"), stockRequestId = rs.getInt("StockRequestId"), amount = rs.getDouble("Amount"),
+                            paymentDate = rs.getString("PaymentDate"), method = rs.getString("Method"), note = rs.getString("Note"),
                         )
                     )
                 }
@@ -46,8 +43,7 @@ class StockRequestPaymentRepository {
         if (!owns(conn, requestId)) return@withConnection Result.failure(IllegalStateException("Not your request."))
         conn.autoCommit = false
         try {
-            val total = totalOf(conn, requestId)
-            val remaining = total - paidOf(conn, requestId)
+            val remaining = Sql.round2(totalOf(conn, requestId) - paidOf(conn, requestId))
             if (remaining > 0) insertPayment(conn, requestId, remaining, "Settlement", "Full settlement")
             StockReqMath.recalculate(conn, requestId)
             conn.commit(); Result.success(Unit)
@@ -70,7 +66,6 @@ class StockRequestPaymentRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    /** Advance balance = overpayment across the salesperson's active requests. */
     suspend fun advanceBalance(): Double = Db.withConnection { conn ->
         conn.prepareStatement(
             """
@@ -81,7 +76,7 @@ class StockRequestPaymentRepository {
               FROM StockRequests r WHERE r.SalesmanId = ? AND r.IsActive = 1
             ) t
             """.trimIndent()
-        ).use { ps -> ps.setInt(1, Session.userId); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 } }
+        ).use { ps -> ps.setInt(1, Session.userId); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 } }
     }
 
     suspend fun applyAdvance(requestId: Int, amount: Double? = null): Result<Unit> = Db.withConnection { conn ->
@@ -99,7 +94,7 @@ class StockRequestPaymentRepository {
             """.trimIndent()
         ).use { ps ->
             ps.setInt(1, Session.userId)
-            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(Row(rs.getInt(1), rs.getString(2), rs.getBigDecimal(3)?.toDouble() ?: 0.0, rs.getBigDecimal(4)?.toDouble() ?: 0.0)) } }
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(Row(rs.getInt(1), rs.getString(2), rs.getDouble(3), rs.getDouble(4))) } }
         }
         fun overpaid(r: Row) = StockReqMath.overpaidOn(r.total, r.paid)
         val available = rows.sumOf { overpaid(it) }
@@ -125,8 +120,6 @@ class StockRequestPaymentRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    // ---- internals ----
-
     private fun owns(conn: Connection, requestId: Int): Boolean =
         conn.prepareStatement("SELECT 1 FROM StockRequests WHERE Id = ? AND SalesmanId = ?").use { ps ->
             ps.setInt(1, requestId); ps.setInt(2, Session.userId); ps.executeQuery().use { it.next() }
@@ -134,19 +127,17 @@ class StockRequestPaymentRepository {
 
     private fun totalOf(conn: Connection, requestId: Int): Double =
         conn.prepareStatement("SELECT TotalAmount FROM StockRequests WHERE Id = ?").use { ps ->
-            ps.setInt(1, requestId); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 }
+            ps.setInt(1, requestId); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 }
         }
 
     private fun paidOf(conn: Connection, requestId: Int): Double =
         conn.prepareStatement("SELECT COALESCE(SUM(Amount),0) FROM StockRequestPayments WHERE StockRequestId = ?").use { ps ->
-            ps.setInt(1, requestId); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 }
+            ps.setInt(1, requestId); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 }
         }
 
     private fun insertPayment(conn: Connection, requestId: Int, amount: Double, method: String?, note: String?) {
-        conn.prepareStatement(
-            "INSERT INTO StockRequestPayments (StockRequestId, Amount, PaymentDate, Method, Note) VALUES (?, ?, SYSUTCDATETIME(), ?, ?)"
-        ).use { ps ->
-            ps.setInt(1, requestId); ps.setBigDecimal(2, BigDecimal.valueOf(amount)); ps.setString(3, method); ps.setString(4, note)
+        conn.prepareStatement("INSERT INTO StockRequestPayments (StockRequestId, Amount, PaymentDate, Method, Note) VALUES (?, ?, datetime('now'), ?, ?)").use { ps ->
+            ps.setInt(1, requestId); ps.setDouble(2, Sql.round2(amount)); ps.setString(3, method); ps.setString(4, note)
             ps.executeUpdate()
         }
     }

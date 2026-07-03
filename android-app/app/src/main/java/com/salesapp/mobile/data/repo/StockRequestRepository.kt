@@ -7,14 +7,10 @@ import com.salesapp.mobile.data.models.PaymentStatus
 import com.salesapp.mobile.data.models.StockRequest
 import com.salesapp.mobile.data.models.StockRequestLine
 import com.salesapp.mobile.data.models.StockRequestStatus
-import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.PreparedStatement
 
-/**
- * "My Orders" — a salesperson's inventory/stock requests, mirroring StockRequestsController.
- * Fulfilling a request receives its lines as priced FIFO batches (via [InventoryOps.receive]).
- */
+/** "My Orders" — stock requests (local SQLite). Fulfilling receives lines as priced FIFO batches. */
 class StockRequestRepository {
 
     suspend fun list(
@@ -32,7 +28,7 @@ class StockRequestRepository {
         val args = mutableListOf<Any>(uid)
         if (active != "all") { where.append(" AND r.IsActive = ?"); args.add(if (active == "inactive") 0 else 1) }
         if (!requestNumber.isNullOrBlank()) { where.append(" AND r.RequestNumber LIKE ?"); args.add("%${requestNumber.trim()}%") }
-        if (!date.isNullOrBlank()) { where.append(" AND CAST(r.CreatedAt AS date) = ?"); args.add(date) }
+        if (!date.isNullOrBlank()) { where.append(" AND date(r.CreatedAt) = ?"); args.add(date) }
         if (status != null) { where.append(" AND r.Status = ?"); args.add(status.value) }
         if (paymentStatus != null) { where.append(" AND r.PaymentStatus = ?"); args.add(paymentStatus.value) }
         if (!item.isNullOrBlank()) {
@@ -47,17 +43,13 @@ class StockRequestRepository {
         val sql = """
             SELECT r.Id, r.RequestNumber, r.CreatedAt, r.Status, r.TotalAmount, r.PaidAmount, r.RemainingAmount,
                    r.PaymentStatus, r.Notes, r.IsActive
-            FROM StockRequests r
-            $where
-            ORDER BY r.CreatedAt DESC, r.Id DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            FROM StockRequests r $where ORDER BY r.CreatedAt DESC, r.Id DESC LIMIT ?, ?
         """.trimIndent()
         val heads = conn.prepareStatement(sql).use { ps ->
             val n = bind(ps, args); ps.setInt(n, (safePage - 1) * pageSize); ps.setInt(n + 1, pageSize)
             ps.executeQuery().use { rs -> buildList { while (rs.next()) add(mapHead(rs)) } }
         }
-        val withItems = heads.map { it.copy(items = loadItems(conn, it.id)) }
-        Paged(withItems, total, safePage, pageSize)
+        Paged(heads.map { it.copy(items = loadItems(conn, it.id)) }, total, safePage, pageSize)
     }
 
     suspend fun create(notes: String?, lines: List<OrderLine>): Result<Int> = Db.withConnection { conn ->
@@ -66,15 +58,15 @@ class StockRequestRepository {
         conn.autoCommit = false
         try {
             val number = generateNumber(conn)
-            val total = lines.sumOf { (it.unitPrice ?: itemPrice(conn, it.itemId)) * it.quantity }
-            val id = conn.prepareStatement(
+            val total = Sql.round2(lines.sumOf { (it.unitPrice ?: itemPrice(conn, it.itemId)) * it.quantity })
+            conn.prepareStatement(
                 "INSERT INTO StockRequests (RequestNumber, SalesmanId, Status, Notes, CreatedAt, TotalAmount, PaidAmount, RemainingAmount, PaymentStatus, IsActive) " +
-                    "OUTPUT INSERTED.Id VALUES (?, ?, 0, ?, SYSUTCDATETIME(), ?, 0, ?, 0, 1)"
+                    "VALUES (?, ?, 0, ?, datetime('now'), ?, 0, ?, 0, 1)"
             ).use { ps ->
-                ps.setString(1, number); ps.setInt(2, Session.userId); ps.setString(3, notes)
-                ps.setBigDecimal(4, BigDecimal.valueOf(total)); ps.setBigDecimal(5, BigDecimal.valueOf(total))
-                ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
+                ps.setString(1, number); ps.setInt(2, Session.userId); ps.setString(3, notes); ps.setDouble(4, total); ps.setDouble(5, total)
+                ps.executeUpdate()
             }
+            val id = Sql.lastInsertId(conn)
             insertLines(conn, id, lines)
             conn.commit(); Result.success(id)
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
@@ -88,9 +80,9 @@ class StockRequestRepository {
         conn.autoCommit = false
         try {
             conn.prepareStatement("DELETE FROM StockRequestItems WHERE StockRequestId = ?").use { ps -> ps.setInt(1, id); ps.executeUpdate() }
-            val total = lines.sumOf { (it.unitPrice ?: itemPrice(conn, it.itemId)) * it.quantity }
+            val total = Sql.round2(lines.sumOf { (it.unitPrice ?: itemPrice(conn, it.itemId)) * it.quantity })
             conn.prepareStatement("UPDATE StockRequests SET Notes = ?, TotalAmount = ? WHERE Id = ?").use { ps ->
-                ps.setString(1, notes); ps.setBigDecimal(2, BigDecimal.valueOf(total)); ps.setInt(3, id); ps.executeUpdate()
+                ps.setString(1, notes); ps.setDouble(2, total); ps.setInt(3, id); ps.executeUpdate()
             }
             insertLines(conn, id, lines)
             StockReqMath.recalculate(conn, id)
@@ -98,7 +90,6 @@ class StockRequestRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    /** Fulfil: receive each line as a priced batch, bump item price, mark Fulfilled. */
     suspend fun fulfill(id: Int): Result<Unit> = Db.withConnection { conn ->
         val h = head2(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Request not found."))
         if (h.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your request."))
@@ -106,9 +97,8 @@ class StockRequestRepository {
         conn.autoCommit = false
         try {
             for (line in loadItems(conn, id)) {
-                val price = BigDecimal.valueOf(line.unitPrice)
-                InventoryOps.receive(conn, line.itemId, line.quantity, price, "Fulfill", id, h.requestNumber)
-                conn.prepareStatement("UPDATE Items SET UnitPrice = ? WHERE Id = ?").use { ps -> ps.setBigDecimal(1, price); ps.setInt(2, line.itemId); ps.executeUpdate() }
+                InventoryOps.receive(conn, line.itemId, line.quantity, line.unitPrice, "Fulfill", id, h.requestNumber)
+                conn.prepareStatement("UPDATE Items SET UnitPrice = ? WHERE Id = ?").use { ps -> ps.setDouble(1, line.unitPrice); ps.setInt(2, line.itemId); ps.executeUpdate() }
             }
             setStatus(conn, id, StockRequestStatus.Fulfilled)
             StockReqMath.recalculate(conn, id)
@@ -124,7 +114,6 @@ class StockRequestRepository {
         Result.success(Unit)
     }
 
-    /** Cancel: if fulfilled, take back the still-remaining received quantity and deplete its batches. */
     suspend fun cancel(id: Int): Result<Unit> = Db.withConnection { conn ->
         val h = head2(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Request not found."))
         if (h.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your request."))
@@ -138,7 +127,7 @@ class StockRequestRepository {
                     ps.setInt(1, id); ps.executeQuery().use { rs -> buildList { while (rs.next()) add(B(rs.getInt(1), rs.getInt(2), rs.getInt(3))) } }
                 }
                 for (b in batches) {
-                    InventoryOps.adjustStock(conn, b.itemId, -b.qty)   // remaining only
+                    InventoryOps.adjustStock(conn, b.itemId, -b.qty)
                     conn.prepareStatement("UPDATE InventoryBatches SET Quantity = 0 WHERE Id = ?").use { ps -> ps.setInt(1, b.id); ps.executeUpdate() }
                 }
             }
@@ -170,27 +159,24 @@ class StockRequestRepository {
 
     private fun itemPrice(conn: Connection, itemId: Int): Double =
         conn.prepareStatement("SELECT UnitPrice FROM Items WHERE Id = ? AND UserId = ?").use { ps ->
-            ps.setInt(1, itemId); ps.setInt(2, Session.userId); ps.executeQuery().use { if (it.next()) it.getBigDecimal(1)?.toDouble() ?: 0.0 else 0.0 }
+            ps.setInt(1, itemId); ps.setInt(2, Session.userId); ps.executeQuery().use { if (it.next()) it.getDouble(1) else 0.0 }
         }
 
     private fun insertLines(conn: Connection, requestId: Int, lines: List<OrderLine>) {
         for (line in lines) {
             val price = line.unitPrice ?: itemPrice(conn, line.itemId)
-            conn.prepareStatement(
-                "INSERT INTO StockRequestItems (StockRequestId, ItemId, Quantity, UnitPrice, LineTotal) VALUES (?, ?, ?, ?, ?)"
-            ).use { ps ->
+            conn.prepareStatement("INSERT INTO StockRequestItems (StockRequestId, ItemId, Quantity, UnitPrice, LineTotal) VALUES (?, ?, ?, ?, ?)").use { ps ->
                 ps.setInt(1, requestId); ps.setInt(2, line.itemId); ps.setInt(3, line.quantity)
-                ps.setBigDecimal(4, BigDecimal.valueOf(price)); ps.setBigDecimal(5, BigDecimal.valueOf(price * line.quantity))
-                ps.executeUpdate()
+                ps.setDouble(4, price); ps.setDouble(5, Sql.round2(price * line.quantity)); ps.executeUpdate()
             }
         }
     }
 
     private fun generateNumber(conn: Connection): String {
         var seq = conn.prepareStatement(
-            "SELECT COUNT(*) FROM StockRequests WHERE YEAR(CreatedAt) = YEAR(SYSUTCDATETIME()) AND MONTH(CreatedAt) = MONTH(SYSUTCDATETIME())"
+            "SELECT COUNT(*) FROM StockRequests WHERE strftime('%Y%m', CreatedAt) = strftime('%Y%m', 'now')"
         ).use { ps -> ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 } } + 1
-        val datePart = conn.prepareStatement("SELECT FORMAT(SYSUTCDATETIME(), 'yy-MM-dd')").use { ps ->
+        val datePart = conn.prepareStatement("SELECT strftime('%y-%m-%d', 'now')").use { ps ->
             ps.executeQuery().use { if (it.next()) it.getString(1) else "" }
         }
         fun fmt(s: Int) = "REQ-$datePart-${s.toString().padStart(6, '0')}"
@@ -205,8 +191,7 @@ class StockRequestRepository {
         conn.prepareStatement(
             """
             SELECT ri.ItemId, i.Name, ri.Quantity, i.StockQuantity, ri.UnitPrice, ri.LineTotal
-            FROM StockRequestItems ri INNER JOIN Items i ON i.Id = ri.ItemId
-            WHERE ri.StockRequestId = ? ORDER BY ri.Id
+            FROM StockRequestItems ri INNER JOIN Items i ON i.Id = ri.ItemId WHERE ri.StockRequestId = ? ORDER BY ri.Id
             """.trimIndent()
         ).use { ps ->
             ps.setInt(1, requestId)
@@ -214,10 +199,8 @@ class StockRequestRepository {
                 buildList {
                     while (rs.next()) add(
                         StockRequestLine(
-                            itemId = rs.getInt("ItemId"), itemName = rs.getString("Name") ?: "",
-                            quantity = rs.getInt("Quantity"), currentStock = rs.getInt("StockQuantity"),
-                            unitPrice = rs.getBigDecimal("UnitPrice")?.toDouble() ?: 0.0,
-                            lineTotal = rs.getBigDecimal("LineTotal")?.toDouble() ?: 0.0,
+                            itemId = rs.getInt("ItemId"), itemName = rs.getString("Name") ?: "", quantity = rs.getInt("Quantity"),
+                            currentStock = rs.getInt("StockQuantity"), unitPrice = rs.getDouble("UnitPrice"), lineTotal = rs.getDouble("LineTotal"),
                         )
                     )
                 }
@@ -225,16 +208,10 @@ class StockRequestRepository {
         }
 
     private fun mapHead(rs: java.sql.ResultSet) = StockRequest(
-        id = rs.getInt("Id"),
-        requestNumber = rs.getString("RequestNumber") ?: "",
-        createdAt = rs.getString("CreatedAt"),
-        status = StockRequestStatus.from(rs.getInt("Status")),
-        totalAmount = rs.getBigDecimal("TotalAmount")?.toDouble() ?: 0.0,
-        paidAmount = rs.getBigDecimal("PaidAmount")?.toDouble() ?: 0.0,
-        remainingAmount = rs.getBigDecimal("RemainingAmount")?.toDouble() ?: 0.0,
-        paymentStatus = PaymentStatus.from(rs.getInt("PaymentStatus")),
-        notes = rs.getString("Notes"),
-        isActive = rs.getBoolean("IsActive"),
+        id = rs.getInt("Id"), requestNumber = rs.getString("RequestNumber") ?: "", createdAt = rs.getString("CreatedAt"),
+        status = StockRequestStatus.from(rs.getInt("Status")), totalAmount = rs.getDouble("TotalAmount"),
+        paidAmount = rs.getDouble("PaidAmount"), remainingAmount = rs.getDouble("RemainingAmount"),
+        paymentStatus = PaymentStatus.from(rs.getInt("PaymentStatus")), notes = rs.getString("Notes"), isActive = rs.getBoolean("IsActive"),
     )
 
     private fun bind(ps: PreparedStatement, args: List<Any>): Int {

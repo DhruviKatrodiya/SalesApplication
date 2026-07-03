@@ -9,7 +9,6 @@ import com.salesapp.mobile.data.models.OrderStatus
 import com.salesapp.mobile.data.models.Paged
 import com.salesapp.mobile.data.models.PaymentStatus
 import com.salesapp.mobile.data.models.ReceivedStatus
-import java.math.BigDecimal
 import java.sql.Connection
 import java.sql.PreparedStatement
 
@@ -17,16 +16,15 @@ import java.sql.PreparedStatement
 data class OrderLine(val itemId: Int, val quantity: Int, val unitPrice: Double? = null)
 
 /**
- * Orders + line items, mirroring OrdersController. Scoped to the signed-in salesperson (SalesmanId).
- * Inventory orders draw from godown stock (FIFO); Dispatch orders draw from the chosen truck's stock.
- * All stock-mutating actions run in a transaction.
+ * Orders + line items (local SQLite), mirroring OrdersController. Inventory orders draw from godown
+ * stock (FIFO); Dispatch orders draw from the chosen truck's stock. Stock actions run in a transaction.
  */
 class OrderRepository {
 
     suspend fun list(
         orderNumber: String? = null,
         customer: String? = null,
-        orderDate: String? = null,          // "yyyy-MM-dd"
+        orderDate: String? = null,
         status: OrderStatus? = null,
         paymentStatus: PaymentStatus? = null,
         customerId: Int? = null,
@@ -41,7 +39,7 @@ class OrderRepository {
         if (customerId != null) { where.append(" AND o.CustomerId = ?"); args.add(customerId) }
         if (!orderNumber.isNullOrBlank()) { where.append(" AND o.OrderNumber LIKE ?"); args.add("%${orderNumber.trim()}%") }
         if (!customer.isNullOrBlank()) { where.append(" AND c.Name LIKE ?"); args.add("%${customer.trim()}%") }
-        if (!orderDate.isNullOrBlank()) { where.append(" AND CAST(o.OrderDate AS date) = ?"); args.add(orderDate) }
+        if (!orderDate.isNullOrBlank()) { where.append(" AND date(o.OrderDate) = ?"); args.add(orderDate) }
         if (status != null) { where.append(" AND o.Status = ?"); args.add(status.value) }
         if (paymentStatus != null) { where.append(" AND o.PaymentStatus = ?"); args.add(paymentStatus.value) }
 
@@ -54,11 +52,7 @@ class OrderRepository {
             SELECT o.Id, o.OrderNumber, o.CustomerId, c.Name AS CustomerName, o.OrderDate, o.DeliveryDate,
                    o.Status, o.PaymentStatus, o.Source, o.TotalAmount, o.PaidAmount, o.RemainingAmount,
                    o.Notes, o.TruckId, t.Name AS TruckName, o.IsActive
-            FROM Orders o
-            $joins
-            $where
-            ORDER BY o.CreatedAt DESC, o.Id DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            FROM Orders o $joins $where ORDER BY o.CreatedAt DESC, o.Id DESC LIMIT ?, ?
         """.trimIndent()
         val items = conn.prepareStatement(sql).use { ps ->
             val n = bind(ps, args); ps.setInt(n, (safePage - 1) * pageSize); ps.setInt(n + 1, pageSize)
@@ -74,66 +68,42 @@ class OrderRepository {
         orderDate: String?, deliveryDate: String?, notes: String?, lines: List<OrderLine>,
     ): Result<Int> = Db.withConnection { conn ->
         val uid = Session.userId
-        if (!owns(conn, "Customers", customerId, uid))
-            return@withConnection Result.failure(IllegalArgumentException("Customer not found."))
-        if (lines.isEmpty())
-            return@withConnection Result.failure(IllegalArgumentException("At least one order item is required."))
-
+        if (!owns(conn, "Customers", customerId, uid)) return@withConnection Result.failure(IllegalArgumentException("Customer not found."))
+        if (lines.isEmpty()) return@withConnection Result.failure(IllegalArgumentException("At least one order item is required."))
         conn.autoCommit = false
         try {
-            // Validate against the correct bucket.
+            if (source == OrderSource.Dispatch && truckId == null) throw IllegalArgumentException("Select a truck for a dispatch order.")
+            if (source == OrderSource.Dispatch && !owns(conn, "Trucks", truckId!!, uid)) throw IllegalArgumentException("Truck not found.")
             for (line in lines) {
-                val item = itemRow(conn, line.itemId, uid)
-                    ?: throw IllegalArgumentException("Item ${line.itemId} not found.")
+                val item = itemRow(conn, line.itemId, uid) ?: throw IllegalArgumentException("Item ${line.itemId} not found.")
                 if (line.quantity <= 0) throw IllegalArgumentException("Quantity for '${item.name}' must be greater than zero.")
                 val available = if (source == OrderSource.Dispatch) truckQty(conn, truckId!!, line.itemId) else item.stock
-                if (available < line.quantity) {
-                    val bucket = if (source == OrderSource.Dispatch) "truck" else "inventory"
-                    throw IllegalStateException("Insufficient $bucket stock for '${item.name}'. Available: $available, requested: ${line.quantity}.")
-                }
+                if (available < line.quantity) throw IllegalStateException(
+                    "Insufficient ${if (source == OrderSource.Dispatch) "truck" else "inventory"} stock for '${item.name}'. Available: $available, requested: ${line.quantity}.")
             }
-            if (source == OrderSource.Dispatch && truckId == null)
-                throw IllegalArgumentException("Select a truck for a dispatch order.")
-            if (source == OrderSource.Dispatch && !owns(conn, "Trucks", truckId!!, uid))
-                throw IllegalArgumentException("Truck not found.")
-
-            val total = lines.sumOf { line ->
-                val price = line.unitPrice ?: itemRow(conn, line.itemId, uid)!!.unitPrice.toDouble()
-                price * line.quantity
-            }
+            val total = Sql.round2(lines.sumOf { (it.unitPrice ?: itemRow(conn, it.itemId, uid)!!.unitPrice) * it.quantity })
             val orderNumber = generateOrderNumber(conn)
-
-            val orderDateExpr = if (orderDate.isNullOrBlank()) "SYSUTCDATETIME()" else "?"
-            val insertSql = """
-                INSERT INTO Orders (OrderNumber, CustomerId, SalesmanId, TruckId, OrderDate, DeliveryDate, Notes,
-                                    Status, PaymentStatus, Source, TotalAmount, PaidAmount, RemainingAmount, CreatedAt, IsActive)
-                OUTPUT INSERTED.Id
-                VALUES (?, ?, ?, ?, $orderDateExpr, ?, ?, 0, 0, ?, ?, 0, ?, SYSUTCDATETIME(), 1)
-            """.trimIndent()
-            val orderId = conn.prepareStatement(insertSql).use { ps ->
+            val orderDateExpr = if (orderDate.isNullOrBlank()) "datetime('now')" else "?"
+            conn.prepareStatement(
+                "INSERT INTO Orders (OrderNumber, CustomerId, SalesmanId, TruckId, OrderDate, DeliveryDate, Notes, " +
+                    "Status, PaymentStatus, Source, TotalAmount, PaidAmount, RemainingAmount, CreatedAt, IsActive) " +
+                    "VALUES (?, ?, ?, ?, $orderDateExpr, ?, ?, 0, 0, ?, ?, 0, ?, datetime('now'), 1)"
+            ).use { ps ->
                 var i = 1
                 ps.setString(i++, orderNumber); ps.setInt(i++, customerId); ps.setInt(i++, uid)
                 if (truckId != null && source == OrderSource.Dispatch) ps.setInt(i++, truckId) else ps.setNull(i++, java.sql.Types.INTEGER)
                 if (!orderDate.isNullOrBlank()) ps.setString(i++, orderDate)
-                if (deliveryDate.isNullOrBlank()) ps.setNull(i++, java.sql.Types.DATE) else ps.setString(i++, deliveryDate)
-                ps.setString(i++, notes)
-                ps.setInt(i++, source.value)
-                ps.setBigDecimal(i++, BigDecimal.valueOf(total))
-                ps.setBigDecimal(i, BigDecimal.valueOf(total))   // RemainingAmount = total (no payments yet)
-                ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
+                if (deliveryDate.isNullOrBlank()) ps.setNull(i++, java.sql.Types.VARCHAR) else ps.setString(i++, deliveryDate)
+                ps.setString(i++, notes); ps.setInt(i++, source.value); ps.setDouble(i++, total); ps.setDouble(i, total)
+                ps.executeUpdate()
             }
-
+            val orderId = Sql.lastInsertId(conn)
             insertLines(conn, uid, orderId, source, truckId, lines)
             conn.commit()
             Result.success(orderId)
-        } catch (e: Exception) {
-            conn.rollback(); Result.failure(e)
-        } finally {
-            conn.autoCommit = true
-        }
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    /** Full edit: restore old stock effects, validate, replace lines, deduct new stock. */
     suspend fun update(
         id: Int, customerId: Int, source: OrderSource, truckId: Int?,
         orderDate: String?, deliveryDate: String?, notes: String?, status: OrderStatus?, lines: List<OrderLine>,
@@ -151,57 +121,38 @@ class OrderRepository {
         conn.autoCommit = false
         try {
             val oldLines = loadItems(conn, id)
-
-            // 1) Return original quantities to the order's CURRENT source bucket.
-            if (current.source == OrderSource.Inventory) {
-                InventoryOps.reverse(conn, "Order", id)
-            } else {
-                for (ol in oldLines) {
-                    if (current.truckId != null) addTruckStock(conn, current.truckId, ol.itemId, ol.quantity)
-                    InventoryOps.adjustDispatchStock(conn, ol.itemId, ol.quantity)
-                }
+            if (current.source == OrderSource.Inventory) InventoryOps.reverse(conn, "Order", id)
+            else for (ol in oldLines) {
+                if (current.truckId != null) addTruckStock(conn, current.truckId, ol.itemId, ol.quantity)
+                InventoryOps.adjustDispatchStock(conn, ol.itemId, ol.quantity)
             }
-
-            // 2) Validate new lines against the NEW bucket (post-restore).
             for (line in lines) {
                 val item = itemRow(conn, line.itemId, uid) ?: throw IllegalArgumentException("Item ${line.itemId} not found.")
                 if (line.quantity <= 0) throw IllegalArgumentException("Quantity for '${item.name}' must be greater than zero.")
                 val available = if (source == OrderSource.Dispatch) truckQty(conn, truckId!!, line.itemId) else item.stock
-                if (available < line.quantity) {
-                    val bucket = if (source == OrderSource.Dispatch) "truck" else "inventory"
-                    throw IllegalStateException("Insufficient $bucket stock for '${item.name}'. Available: $available, requested: ${line.quantity}.")
-                }
+                if (available < line.quantity) throw IllegalStateException(
+                    "Insufficient ${if (source == OrderSource.Dispatch) "truck" else "inventory"} stock for '${item.name}'. Available: $available, requested: ${line.quantity}.")
             }
-
-            // 3) Replace lines + header, deduct new stock.
             conn.prepareStatement("DELETE FROM OrderItems WHERE OrderId = ?").use { ps -> ps.setInt(1, id); ps.executeUpdate() }
-
-            val total = lines.sumOf { (it.unitPrice ?: itemRow(conn, it.itemId, uid)!!.unitPrice.toDouble()) * it.quantity }
+            val total = Sql.round2(lines.sumOf { (it.unitPrice ?: itemRow(conn, it.itemId, uid)!!.unitPrice) * it.quantity })
             val setDate = if (orderDate.isNullOrBlank()) "" else "OrderDate = ?, "
-            val sql = "UPDATE Orders SET CustomerId = ?, ${setDate}DeliveryDate = ?, Notes = ?, Status = ?, Source = ?, TruckId = ?, TotalAmount = ? WHERE Id = ?"
-            conn.prepareStatement(sql).use { ps ->
+            conn.prepareStatement(
+                "UPDATE Orders SET CustomerId = ?, ${setDate}DeliveryDate = ?, Notes = ?, Status = ?, Source = ?, TruckId = ?, TotalAmount = ? WHERE Id = ?"
+            ).use { ps ->
                 var i = 1
                 ps.setInt(i++, customerId)
                 if (!orderDate.isNullOrBlank()) ps.setString(i++, orderDate)
-                if (deliveryDate.isNullOrBlank()) ps.setNull(i++, java.sql.Types.DATE) else ps.setString(i++, deliveryDate)
-                ps.setString(i++, notes)
-                ps.setInt(i++, (status ?: current.status).value)
-                ps.setInt(i++, source.value)
+                if (deliveryDate.isNullOrBlank()) ps.setNull(i++, java.sql.Types.VARCHAR) else ps.setString(i++, deliveryDate)
+                ps.setString(i++, notes); ps.setInt(i++, (status ?: current.status).value); ps.setInt(i++, source.value)
                 if (source == OrderSource.Dispatch) ps.setInt(i++, truckId!!) else ps.setNull(i++, java.sql.Types.INTEGER)
-                ps.setBigDecimal(i++, BigDecimal.valueOf(total))
-                ps.setInt(i, id)
+                ps.setDouble(i++, total); ps.setInt(i, id)
                 ps.executeUpdate()
             }
-
             insertLines(conn, uid, id, source, truckId, lines)
             OrderMath.recalculate(conn, id)
             conn.commit()
             Result.success(Unit)
-        } catch (e: Exception) {
-            conn.rollback(); Result.failure(e)
-        } finally {
-            conn.autoCommit = true
-        }
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
     suspend fun updateStatus(id: Int, status: OrderStatus): Result<Unit> = Db.withConnection { conn ->
@@ -210,14 +161,14 @@ class OrderRepository {
         if (h.status == OrderStatus.Cancelled) return@withConnection Result.failure(IllegalStateException("This order is cancelled."))
         if (h.status == OrderStatus.Completed) return@withConnection Result.failure(IllegalStateException("This order is completed."))
         conn.prepareStatement("UPDATE Orders SET Status = ? WHERE Id = ?").use { ps -> ps.setInt(1, status.value); ps.setInt(2, id); ps.executeUpdate() }
-        OrderMath.recalculate(conn, id)   // Advance <-> Partial may shift with delivery state
+        OrderMath.recalculate(conn, id)
         Result.success(Unit)
     }
 
     suspend fun updateDeliveryDate(id: Int, deliveryDate: String?): Result<Unit> = Db.withConnection { conn ->
         if (!ownsOrder(conn, id)) return@withConnection Result.failure(IllegalStateException("You can only manage your own orders."))
         conn.prepareStatement("UPDATE Orders SET DeliveryDate = ? WHERE Id = ?").use { ps ->
-            if (deliveryDate.isNullOrBlank()) ps.setNull(1, java.sql.Types.DATE) else ps.setString(1, deliveryDate)
+            if (deliveryDate.isNullOrBlank()) ps.setNull(1, java.sql.Types.VARCHAR) else ps.setString(1, deliveryDate)
             ps.setInt(2, id); ps.executeUpdate()
         }
         Result.success(Unit)
@@ -231,33 +182,24 @@ class OrderRepository {
         Result.success(Unit)
     }
 
-    /** Cancel: return stock to source, void the balance, paid amount becomes advance. */
     suspend fun cancel(id: Int): Result<Unit> = Db.withConnection { conn ->
         val h = orderHeader(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Order not found."))
         if (h.salesmanId != Session.userId) return@withConnection Result.failure(IllegalStateException("You can only manage your own orders."))
         if (h.status == OrderStatus.Cancelled) return@withConnection Result.failure(IllegalStateException("This order is already cancelled."))
-
         conn.autoCommit = false
         try {
             val lines = loadItems(conn, id)
-            if (h.source == OrderSource.Inventory) {
-                InventoryOps.reverse(conn, "Order", id)
-            } else {
-                for (line in lines) {
-                    InventoryOps.adjustDispatchStock(conn, line.itemId, line.quantity)
-                    if (h.truckId != null) addTruckStock(conn, h.truckId, line.itemId, line.quantity)
-                }
+            if (h.source == OrderSource.Inventory) InventoryOps.reverse(conn, "Order", id)
+            else for (line in lines) {
+                InventoryOps.adjustDispatchStock(conn, line.itemId, line.quantity)
+                if (h.truckId != null) addTruckStock(conn, h.truckId, line.itemId, line.quantity)
             }
             conn.prepareStatement("UPDATE Orders SET Status = ?, RemainingAmount = 0 WHERE Id = ?").use { ps ->
                 ps.setInt(1, OrderStatus.Cancelled.value); ps.setInt(2, id); ps.executeUpdate()
             }
             conn.commit()
             Result.success(Unit)
-        } catch (e: Exception) {
-            conn.rollback(); Result.failure(e)
-        } finally {
-            conn.autoCommit = true
-        }
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
     suspend fun deactivate(id: Int): Boolean = setActive(id, false)
@@ -271,11 +213,11 @@ class OrderRepository {
 
     // ---- internals ----
 
-    private data class ItemRow(val name: String, val stock: Int, val unitPrice: BigDecimal)
+    private data class ItemRow(val name: String, val stock: Int, val unitPrice: Double)
     private fun itemRow(conn: Connection, itemId: Int, uid: Int): ItemRow? =
         conn.prepareStatement("SELECT Name, StockQuantity, UnitPrice FROM Items WHERE Id = ? AND UserId = ?").use { ps ->
             ps.setInt(1, itemId); ps.setInt(2, uid)
-            ps.executeQuery().use { if (it.next()) ItemRow(it.getString(1) ?: "", it.getInt(2), it.getBigDecimal(3) ?: BigDecimal.ZERO) else null }
+            ps.executeQuery().use { if (it.next()) ItemRow(it.getString(1) ?: "", it.getInt(2), it.getDouble(3)) else null }
         }
 
     private data class Header(val salesmanId: Int, val status: OrderStatus, val source: OrderSource, val truckId: Int?, val orderNumber: String)
@@ -284,13 +226,8 @@ class OrderRepository {
             ps.setInt(1, id)
             ps.executeQuery().use {
                 if (!it.next()) null
-                else Header(
-                    salesmanId = it.getInt(1),
-                    status = OrderStatus.from(it.getInt(2)),
-                    source = OrderSource.from(it.getInt(3)),
-                    truckId = it.getInt(4).let { v -> if (it.wasNull()) null else v },
-                    orderNumber = it.getString(5) ?: "",
-                )
+                else Header(it.getInt(1), OrderStatus.from(it.getInt(2)), OrderSource.from(it.getInt(3)),
+                    it.getInt(4).let { v -> if (it.wasNull()) null else v }, it.getString(5) ?: "")
             }
         }
 
@@ -313,26 +250,24 @@ class OrderRepository {
         val updated = conn.prepareStatement("UPDATE TruckStocks SET Quantity = Quantity + ? WHERE TruckId = ? AND ItemId = ?").use { ps ->
             ps.setInt(1, delta); ps.setInt(2, truckId); ps.setInt(3, itemId); ps.executeUpdate()
         }
-        if (updated == 0 && delta != 0) conn.prepareStatement(
-            "INSERT INTO TruckStocks (TruckId, ItemId, Quantity) VALUES (?, ?, ?)"
-        ).use { ps -> ps.setInt(1, truckId); ps.setInt(2, itemId); ps.setInt(3, delta); ps.executeUpdate() }
+        if (updated == 0 && delta != 0) conn.prepareStatement("INSERT INTO TruckStocks (TruckId, ItemId, Quantity) VALUES (?, ?, ?)").use { ps ->
+            ps.setInt(1, truckId); ps.setInt(2, itemId); ps.setInt(3, delta); ps.executeUpdate()
+        }
     }
 
-    /** Insert order lines and deduct stock from the correct bucket. */
     private fun insertLines(conn: Connection, uid: Int, orderId: Int, source: OrderSource, truckId: Int?, lines: List<OrderLine>) {
         for (line in lines) {
             val item = itemRow(conn, line.itemId, uid)!!
-            val price = line.unitPrice ?: item.unitPrice.toDouble()
+            val price = line.unitPrice ?: item.unitPrice
             conn.prepareStatement(
                 "INSERT INTO OrderItems (OrderId, ItemId, Quantity, UnitPrice, LineTotal, ReceivedStatus) VALUES (?, ?, ?, ?, ?, 0)"
             ).use { ps ->
                 ps.setInt(1, orderId); ps.setInt(2, line.itemId); ps.setInt(3, line.quantity)
-                ps.setBigDecimal(4, BigDecimal.valueOf(price)); ps.setBigDecimal(5, BigDecimal.valueOf(price * line.quantity))
-                ps.executeUpdate()
+                ps.setDouble(4, price); ps.setDouble(5, Sql.round2(price * line.quantity)); ps.executeUpdate()
             }
             if (source == OrderSource.Dispatch) {
                 addTruckStock(conn, truckId!!, line.itemId, -line.quantity)
-                InventoryOps.adjustDispatchStock(conn, line.itemId, -line.quantity, clampZero = false)
+                InventoryOps.adjustDispatchStock(conn, line.itemId, -line.quantity)
             } else {
                 InventoryOps.consumeFifo(conn, line.itemId, line.quantity, "Order", orderId, orderNumberOf(conn, orderId))
             }
@@ -345,11 +280,10 @@ class OrderRepository {
         }
 
     private fun generateOrderNumber(conn: Connection): String {
-        // Monthly sequence, resets each month; format ORD-yy-MM-dd-000001.
         var seq = conn.prepareStatement(
-            "SELECT COUNT(*) FROM Orders WHERE YEAR(CreatedAt) = YEAR(SYSUTCDATETIME()) AND MONTH(CreatedAt) = MONTH(SYSUTCDATETIME())"
+            "SELECT COUNT(*) FROM Orders WHERE strftime('%Y%m', CreatedAt) = strftime('%Y%m', 'now')"
         ).use { ps -> ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 } } + 1
-        val datePart = conn.prepareStatement("SELECT FORMAT(SYSUTCDATETIME(), 'yy-MM-dd')").use { ps ->
+        val datePart = conn.prepareStatement("SELECT strftime('%y-%m-%d', 'now')").use { ps ->
             ps.executeQuery().use { if (it.next()) it.getString(1) else "" }
         }
         fun format(s: Int) = "ORD-$datePart-${s.toString().padStart(6, '0')}"
@@ -367,8 +301,7 @@ class OrderRepository {
         conn.prepareStatement(
             """
             SELECT oi.Id, oi.ItemId, i.Name, oi.Quantity, oi.UnitPrice, oi.LineTotal, oi.ReceivedStatus
-            FROM OrderItems oi INNER JOIN Items i ON i.Id = oi.ItemId
-            WHERE oi.OrderId = ? ORDER BY oi.Id
+            FROM OrderItems oi INNER JOIN Items i ON i.Id = oi.ItemId WHERE oi.OrderId = ? ORDER BY oi.Id
             """.trimIndent()
         ).use { ps ->
             ps.setInt(1, orderId)
@@ -377,9 +310,7 @@ class OrderRepository {
                     while (rs.next()) add(
                         OrderItem(
                             id = rs.getInt("Id"), itemId = rs.getInt("ItemId"), itemName = rs.getString("Name") ?: "",
-                            quantity = rs.getInt("Quantity"),
-                            unitPrice = rs.getBigDecimal("UnitPrice")?.toDouble() ?: 0.0,
-                            lineTotal = rs.getBigDecimal("LineTotal")?.toDouble() ?: 0.0,
+                            quantity = rs.getInt("Quantity"), unitPrice = rs.getDouble("UnitPrice"), lineTotal = rs.getDouble("LineTotal"),
                             receivedStatus = ReceivedStatus.from(rs.getInt("ReceivedStatus")),
                         )
                     )
@@ -390,22 +321,12 @@ class OrderRepository {
     private fun mapOrder(rs: java.sql.ResultSet): Order {
         val truckId = rs.getInt("TruckId").let { if (rs.wasNull()) null else it }
         return Order(
-            id = rs.getInt("Id"),
-            orderNumber = rs.getString("OrderNumber") ?: "",
-            customerId = rs.getInt("CustomerId"),
-            customerName = rs.getString("CustomerName") ?: "",
-            orderDate = rs.getString("OrderDate"),
-            deliveryDate = rs.getString("DeliveryDate"),
-            status = OrderStatus.from(rs.getInt("Status")),
-            paymentStatus = PaymentStatus.from(rs.getInt("PaymentStatus")),
-            source = OrderSource.from(rs.getInt("Source")),
-            totalAmount = rs.getBigDecimal("TotalAmount")?.toDouble() ?: 0.0,
-            paidAmount = rs.getBigDecimal("PaidAmount")?.toDouble() ?: 0.0,
-            remainingAmount = rs.getBigDecimal("RemainingAmount")?.toDouble() ?: 0.0,
-            notes = rs.getString("Notes"),
-            truckId = truckId,
-            truckName = rs.getString("TruckName"),
-            isActive = rs.getBoolean("IsActive"),
+            id = rs.getInt("Id"), orderNumber = rs.getString("OrderNumber") ?: "", customerId = rs.getInt("CustomerId"),
+            customerName = rs.getString("CustomerName") ?: "", orderDate = rs.getString("OrderDate"), deliveryDate = rs.getString("DeliveryDate"),
+            status = OrderStatus.from(rs.getInt("Status")), paymentStatus = PaymentStatus.from(rs.getInt("PaymentStatus")),
+            source = OrderSource.from(rs.getInt("Source")), totalAmount = rs.getDouble("TotalAmount"),
+            paidAmount = rs.getDouble("PaidAmount"), remainingAmount = rs.getDouble("RemainingAmount"),
+            notes = rs.getString("Notes"), truckId = truckId, truckName = rs.getString("TruckName"), isActive = rs.getBoolean("IsActive"),
         )
     }
 

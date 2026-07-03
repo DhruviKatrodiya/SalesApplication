@@ -9,15 +9,14 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 
 /**
- * Truck dispatches, mirroring DispatchController. Recording a dispatch FIFO-consumes godown stock,
- * loads the truck's own stock ledger, and merges into the same-day entry for a truck. Delete/activate
- * reverse/re-apply those stock effects. (In-line editing of a saved dispatch is deferred.)
+ * Truck dispatches (local SQLite), mirroring DispatchController. Recording FIFO-consumes godown stock,
+ * loads the truck's ledger, and merges into the same-day entry. Delete/activate reverse/re-apply stock.
  */
 class DispatchRepository {
 
     suspend fun list(
         truck: String? = null,
-        date: String? = null,             // "yyyy-MM-dd"
+        date: String? = null,
         active: String = "active",
         page: Int = 1,
         pageSize: Int = 500,
@@ -27,7 +26,7 @@ class DispatchRepository {
         val args = mutableListOf<Any>(uid)
         if (active != "all") { where.append(" AND d.IsActive = ?"); args.add(if (active == "inactive") 0 else 1) }
         if (!truck.isNullOrBlank()) { where.append(" AND d.TruckLabel = ?"); args.add(truck.trim()) }
-        if (!date.isNullOrBlank()) { where.append(" AND CAST(d.DispatchDate AS date) = ?"); args.add(date) }
+        if (!date.isNullOrBlank()) { where.append(" AND date(d.DispatchDate) = ?"); args.add(date) }
 
         val total = conn.prepareStatement("SELECT COUNT(*) FROM Dispatches d $where").use { ps ->
             bind(ps, args); ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
@@ -35,10 +34,7 @@ class DispatchRepository {
         val safePage = if (page < 1) 1 else page
         val sql = """
             SELECT d.Id, d.DispatchDate, d.TruckLabel, d.Notes, d.IsActive
-            FROM Dispatches d
-            $where
-            ORDER BY d.DispatchDate DESC, d.Id DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            FROM Dispatches d $where ORDER BY d.DispatchDate DESC, d.Id DESC LIMIT ?, ?
         """.trimIndent()
         val heads = conn.prepareStatement(sql).use { ps ->
             val n = bind(ps, args); ps.setInt(n, (safePage - 1) * pageSize); ps.setInt(n + 1, pageSize)
@@ -46,18 +42,14 @@ class DispatchRepository {
                 buildList {
                     while (rs.next()) add(
                         Dispatch(
-                            id = rs.getInt("Id"),
-                            dispatchDate = rs.getString("DispatchDate"),
-                            truckLabel = rs.getString("TruckLabel") ?: "",
-                            notes = rs.getString("Notes"),
-                            isActive = rs.getBoolean("IsActive"),
+                            id = rs.getInt("Id"), dispatchDate = rs.getString("DispatchDate"),
+                            truckLabel = rs.getString("TruckLabel") ?: "", notes = rs.getString("Notes"), isActive = rs.getBoolean("IsActive"),
                         )
                     )
                 }
             }
         }
-        val withItems = heads.map { it.copy(items = loadItems(conn, it.id)) }
-        Paged(withItems, total, safePage, pageSize)
+        Paged(heads.map { it.copy(items = loadItems(conn, it.id)) }, total, safePage, pageSize)
     }
 
     suspend fun truckLabels(): List<String> = Db.withConnection { conn ->
@@ -67,42 +59,37 @@ class DispatchRepository {
         }
     }
 
-    /** Record a dispatch: validate stock, FIFO-consume, load the truck, merge same-day. */
-    suspend fun create(truckLabel: String?, notes: String?, lines: List<Pair<Int, Int>>): Result<Int> =
-        Db.withConnection { conn ->
-            val uid = Session.userId
-            if (lines.isEmpty()) return@withConnection Result.failure(IllegalArgumentException("At least one item is required."))
-            conn.autoCommit = false
-            try {
-                for ((itemId, qty) in lines) {
-                    val item = itemRow(conn, itemId, uid) ?: throw IllegalArgumentException("Item $itemId not found.")
-                    if (qty <= 0) throw IllegalArgumentException("Quantity for '${item.first}' must be greater than zero.")
-                    if (item.second < qty) throw IllegalStateException("Insufficient stock for '${item.first}'. Available: ${item.second}, requested: $qty.")
-                }
-                val truck = truckLabel?.trim().takeUnless { it.isNullOrEmpty() } ?: "Truck-1"
-                val truckId = ensureTruck(conn, uid, truck)
-                val dispatchId = sameDayDispatch(conn, uid, truck) ?: conn.prepareStatement(
-                    "INSERT INTO Dispatches (UserId, TruckLabel, Notes, DispatchDate, IsActive) " +
-                        "OUTPUT INSERTED.Id VALUES (?, ?, ?, SYSUTCDATETIME(), 1)"
-                ).use { ps ->
-                    ps.setInt(1, uid); ps.setString(2, truck); ps.setString(3, notes)
-                    ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
-                }
-                if (!notes.isNullOrBlank()) conn.prepareStatement("UPDATE Dispatches SET Notes = ? WHERE Id = ?").use { ps ->
-                    ps.setString(1, notes); ps.setInt(2, dispatchId); ps.executeUpdate()
-                }
+    suspend fun create(truckLabel: String?, notes: String?, lines: List<Pair<Int, Int>>): Result<Int> = Db.withConnection { conn ->
+        val uid = Session.userId
+        if (lines.isEmpty()) return@withConnection Result.failure(IllegalArgumentException("At least one item is required."))
+        conn.autoCommit = false
+        try {
+            for ((itemId, qty) in lines) {
+                val item = itemRow(conn, itemId, uid) ?: throw IllegalArgumentException("Item $itemId not found.")
+                if (qty <= 0) throw IllegalArgumentException("Quantity for '${item.first}' must be greater than zero.")
+                if (item.second < qty) throw IllegalStateException("Insufficient stock for '${item.first}'. Available: ${item.second}, requested: $qty.")
+            }
+            val truck = truckLabel?.trim().takeUnless { it.isNullOrEmpty() } ?: "Truck-1"
+            val truckId = ensureTruck(conn, uid, truck)
+            val dispatchId = sameDayDispatch(conn, uid, truck) ?: run {
+                conn.prepareStatement(
+                    "INSERT INTO Dispatches (UserId, TruckLabel, Notes, DispatchDate, IsActive) VALUES (?, ?, ?, datetime('now'), 1)"
+                ).use { ps -> ps.setInt(1, uid); ps.setString(2, truck); ps.setString(3, notes); ps.executeUpdate() }
+                Sql.lastInsertId(conn)
+            }
+            if (!notes.isNullOrBlank()) conn.prepareStatement("UPDATE Dispatches SET Notes = ? WHERE Id = ?").use { ps ->
+                ps.setString(1, notes); ps.setInt(2, dispatchId); ps.executeUpdate()
+            }
+            for ((itemId, qty) in lines) {
+                InventoryOps.consumeFifo(conn, itemId, qty, "Dispatch", dispatchId, truck)
+                InventoryOps.adjustDispatchStock(conn, itemId, qty)
+                addTruckStock(conn, truckId, itemId, qty)
+                mergeDispatchLine(conn, dispatchId, itemId, qty)
+            }
+            conn.commit(); Result.success(dispatchId)
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
+    }
 
-                for ((itemId, qty) in lines) {
-                    InventoryOps.consumeFifo(conn, itemId, qty, "Dispatch", dispatchId, truck)
-                    InventoryOps.adjustDispatchStock(conn, itemId, qty)
-                    addTruckStock(conn, truckId, itemId, qty)
-                    mergeDispatchLine(conn, dispatchId, itemId, qty)
-                }
-                conn.commit(); Result.success(dispatchId)
-            } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
-        }
-
-    /** Soft-delete: reverse the dispatch's stock effects and flag inactive. */
     suspend fun delete(id: Int): Result<Unit> = Db.withConnection { conn ->
         val d = head(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Dispatch not found."))
         if (d.userId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your dispatch."))
@@ -115,7 +102,6 @@ class DispatchRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
-    /** Reactivate: re-load the dispatch's stock onto the truck (FIFO), after checking availability. */
     suspend fun activate(id: Int): Result<Unit> = Db.withConnection { conn ->
         val d = head(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Dispatch not found."))
         if (d.userId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your dispatch."))
@@ -124,10 +110,8 @@ class DispatchRepository {
         try {
             val lines = loadItems(conn, id)
             for (line in lines) {
-                val item = itemRow(conn, line.itemId, d.userId)
-                    ?: throw IllegalStateException("Item '${line.itemName}' no longer exists; cannot reactivate.")
-                if (item.second < line.quantity)
-                    throw IllegalStateException("Insufficient stock for '${line.itemName}' to reactivate. Available: ${item.second}, needed: ${line.quantity}.")
+                val item = itemRow(conn, line.itemId, d.userId) ?: throw IllegalStateException("Item '${line.itemName}' no longer exists; cannot reactivate.")
+                if (item.second < line.quantity) throw IllegalStateException("Insufficient stock for '${line.itemName}' to reactivate. Available: ${item.second}, needed: ${line.quantity}.")
             }
             val truckId = ensureTruck(conn, d.userId, d.truckLabel)
             for (line in lines) {
@@ -147,7 +131,7 @@ class DispatchRepository {
         if (linked) InventoryOps.reverse(conn, "Dispatch", dispatchId)
         val truckId = existingTruck(conn, Session.userId, truckLabel)
         for (line in loadItems(conn, dispatchId)) {
-            if (!linked) InventoryOps.adjustStock(conn, line.itemId, line.quantity)   // legacy: no movement link
+            if (!linked) InventoryOps.adjustStock(conn, line.itemId, line.quantity)
             InventoryOps.adjustDispatchStock(conn, line.itemId, -line.quantity, clampZero = true)
             if (truckId != null) conn.prepareStatement(
                 "UPDATE TruckStocks SET Quantity = CASE WHEN Quantity - ? < 0 THEN 0 ELSE Quantity - ? END WHERE TruckId = ? AND ItemId = ?"
@@ -157,7 +141,7 @@ class DispatchRepository {
 
     private fun sameDayDispatch(conn: Connection, uid: Int, truck: String): Int? =
         conn.prepareStatement(
-            "SELECT Id FROM Dispatches WHERE UserId = ? AND TruckLabel = ? AND CAST(DispatchDate AS date) = CAST(SYSUTCDATETIME() AS date)"
+            "SELECT Id FROM Dispatches WHERE UserId = ? AND TruckLabel = ? AND date(DispatchDate) = date('now')"
         ).use { ps -> ps.setInt(1, uid); ps.setString(2, truck); ps.executeQuery().use { if (it.next()) it.getInt(1) else null } }
 
     private fun mergeDispatchLine(conn: Connection, dispatchId: Int, itemId: Int, qty: Int) {
@@ -170,9 +154,12 @@ class DispatchRepository {
     }
 
     private fun ensureTruck(conn: Connection, uid: Int, name: String): Int =
-        existingTruck(conn, uid, name) ?: conn.prepareStatement(
-            "INSERT INTO Trucks (UserId, Name, CreatedAt, IsActive) OUTPUT INSERTED.Id VALUES (?, ?, SYSUTCDATETIME(), 1)"
-        ).use { ps -> ps.setInt(1, uid); ps.setString(2, name); ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 } }
+        existingTruck(conn, uid, name) ?: run {
+            conn.prepareStatement("INSERT INTO Trucks (UserId, Name, CreatedAt, IsActive) VALUES (?, ?, datetime('now'), 1)").use { ps ->
+                ps.setInt(1, uid); ps.setString(2, name); ps.executeUpdate()
+            }
+            Sql.lastInsertId(conn)
+        }
 
     private fun existingTruck(conn: Connection, uid: Int, name: String): Int? =
         conn.prepareStatement("SELECT Id FROM Trucks WHERE UserId = ? AND Name = ?").use { ps ->
@@ -188,7 +175,6 @@ class DispatchRepository {
         }
     }
 
-    /** Returns (name, stock) for an owned item. */
     private fun itemRow(conn: Connection, itemId: Int, uid: Int): Pair<String, Int>? =
         conn.prepareStatement("SELECT Name, StockQuantity FROM Items WHERE Id = ? AND UserId = ?").use { ps ->
             ps.setInt(1, itemId); ps.setInt(2, uid)
@@ -207,9 +193,7 @@ class DispatchRepository {
             "SELECT di.ItemId, i.Name, di.Quantity FROM DispatchItems di INNER JOIN Items i ON i.Id = di.ItemId WHERE di.DispatchId = ? ORDER BY i.Name"
         ).use { ps ->
             ps.setInt(1, dispatchId)
-            ps.executeQuery().use { rs ->
-                buildList { while (rs.next()) add(DispatchLine(rs.getInt(1), rs.getString(2) ?: "", rs.getInt(3))) }
-            }
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(DispatchLine(rs.getInt(1), rs.getString(2) ?: "", rs.getInt(3))) } }
         }
 
     private fun bind(ps: PreparedStatement, args: List<Any>): Int {

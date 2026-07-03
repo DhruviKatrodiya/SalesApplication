@@ -1,119 +1,143 @@
 package com.salesapp.mobile.data
 
 import android.content.Context
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.mindrot.jbcrypt.BCrypt
 import java.sql.Connection
 import java.sql.DriverManager
 
 /**
- * Connection details for the SQL Server the app talks to directly.
- * Persisted encrypted on the device (see [Db.saveConfig]).
- */
-data class DbConfig(
-    val host: String,
-    val port: Int = 1433,
-    val database: String = "SalesAppDb",
-    val user: String,
-    val password: String,
-) {
-    /**
-     * jTDS URL. jTDS is used instead of the official mssql-jdbc because the
-     * Microsoft driver relies on JDBC internals that are missing on Android.
-     * loginTimeout/socketTimeout keep the UI from hanging on an unreachable server.
-     */
-    fun url(): String =
-        "jdbc:jtds:sqlserver://$host:$port/$database;loginTimeout=8;socketTimeout=30"
-}
-
-/**
- * Single entry point for all database access. Every call opens a fresh short-lived
- * connection on the IO dispatcher — simplest robust model for a mobile network where
- * a pooled socket would go stale. Business logic lives in the repositories, not here.
+ * Fully local, on-device storage. All data lives in a single SQLite database file inside the
+ * app's private storage — no server, no network. Access goes through the SQLDroid JDBC driver
+ * so the repositories keep their PreparedStatement/Connection code; only the SQL dialect is SQLite.
  */
 object Db {
 
-    private const val PREFS = "salesapp_secure"
-    private const val K_HOST = "db_host"
-    private const val K_PORT = "db_port"
-    private const val K_NAME = "db_name"
-    private const val K_USER = "db_user"
-    private const val K_PASS = "db_pass"
+    private const val DEFAULT_EMAIL = "sales@salesapp.com"
+    private const val DEFAULT_PASSWORD = "Sales@123"
 
-    @Volatile private var config: DbConfig? = null
+    @Volatile private var dbUrl: String? = null
     private var driverLoaded = false
 
-    fun isConfigured(): Boolean = config != null
-
-    fun currentConfig(): DbConfig? = config
-
-    private fun prefs(ctx: Context) = EncryptedSharedPreferences.create(
-        ctx,
-        PREFS,
-        MasterKey.Builder(ctx).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-
-    /** Load saved connection details (if any) into memory. Call once on app start. */
-    fun loadConfig(ctx: Context) {
-        val p = prefs(ctx)
-        val host = p.getString(K_HOST, null) ?: return
-        val user = p.getString(K_USER, null) ?: return
-        config = DbConfig(
-            host = host,
-            port = p.getInt(K_PORT, 1433),
-            database = p.getString(K_NAME, "SalesAppDb") ?: "SalesAppDb",
-            user = user,
-            password = p.getString(K_PASS, "") ?: "",
-        )
-    }
-
-    fun saveConfig(ctx: Context, cfg: DbConfig) {
-        prefs(ctx).edit()
-            .putString(K_HOST, cfg.host)
-            .putInt(K_PORT, cfg.port)
-            .putString(K_NAME, cfg.database)
-            .putString(K_USER, cfg.user)
-            .putString(K_PASS, cfg.password)
-            .apply()
-        config = cfg
-    }
-
-    fun clearConfig(ctx: Context) {
-        prefs(ctx).edit().clear().apply()
-        config = null
+    /** Create the database + schema and seed the default user. Call once on app start. */
+    fun init(ctx: Context) {
+        val path = ctx.getDatabasePath("salesapp.db")
+        path.parentFile?.mkdirs()
+        dbUrl = "jdbc:sqldroid:${path.absolutePath}"
+        ensureDriver()
+        open().use { conn ->
+            conn.createStatement().use { st -> SCHEMA.forEach { st.execute(it) } }
+            seedDefaultUser(conn)
+        }
     }
 
     private fun ensureDriver() {
         if (!driverLoaded) {
-            Class.forName("net.sourceforge.jtds.jdbc.Driver")
+            Class.forName("org.sqldroid.SQLDroidDriver")
             driverLoaded = true
         }
     }
 
-    private fun open(cfg: DbConfig): Connection {
-        ensureDriver()
-        return DriverManager.getConnection(cfg.url(), cfg.user, cfg.password)
+    private fun open(): Connection {
+        val url = dbUrl ?: error("Database is not initialized")
+        val conn = DriverManager.getConnection(url)
+        conn.createStatement().use { it.execute("PRAGMA busy_timeout = 5000") }
+        return conn
     }
 
-    /**
-     * Run [block] with an open connection on the IO dispatcher, closing it afterwards.
-     * All repository methods funnel through here.
-     */
+    /** Run [block] with an open connection on the IO dispatcher, closing it afterwards. */
     suspend fun <T> withConnection(block: (Connection) -> T): T = withContext(Dispatchers.IO) {
-        val cfg = config ?: error("Database is not configured")
-        open(cfg).use { conn -> block(conn) }
+        open().use { conn -> block(conn) }
     }
 
-    /** Open a throwaway connection to validate the saved/entered settings. */
-    suspend fun testConnection(cfg: DbConfig): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            open(cfg).use { c ->
-                c.createStatement().use { st -> st.executeQuery("SELECT 1").close() }
-            }
+    private fun seedDefaultUser(conn: Connection) {
+        val count = conn.prepareStatement("SELECT COUNT(*) FROM Users").use { ps ->
+            ps.executeQuery().use { if (it.next()) it.getInt(1) else 0 }
+        }
+        if (count > 0) return
+        val hash = BCrypt.hashpw(DEFAULT_PASSWORD, BCrypt.gensalt())
+        conn.prepareStatement(
+            "INSERT INTO Users (FullName, Email, PasswordHash, CreatedAt) VALUES (?, ?, ?, datetime('now'))"
+        ).use { ps ->
+            ps.setString(1, "Sales Person"); ps.setString(2, DEFAULT_EMAIL); ps.setString(3, hash)
+            ps.executeUpdate()
         }
     }
+
+    /** SQLite schema. Booleans are INTEGER 0/1, money is REAL, dates/timestamps are TEXT. */
+    private val SCHEMA = listOf(
+        """CREATE TABLE IF NOT EXISTS Users (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, FullName TEXT NOT NULL DEFAULT '',
+            Email TEXT NOT NULL UNIQUE, PasswordHash TEXT NOT NULL DEFAULT '',
+            Phone TEXT, ProfileImagePath TEXT, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')))""",
+        """CREATE TABLE IF NOT EXISTS Categories (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, Name TEXT NOT NULL DEFAULT '',
+            Description TEXT, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS SubCategories (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, CategoryId INTEGER NOT NULL,
+            Name TEXT NOT NULL DEFAULT '', Description TEXT,
+            CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS Items (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, SubCategoryId INTEGER NOT NULL,
+            Name TEXT NOT NULL DEFAULT '', Sku TEXT, Unit TEXT,
+            StockQuantity INTEGER NOT NULL DEFAULT 0, DispatchStock INTEGER NOT NULL DEFAULT 0,
+            UnitPrice REAL NOT NULL DEFAULT 0, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+            IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS InventoryBatches (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            InitialQuantity INTEGER NOT NULL DEFAULT 0, Quantity INTEGER NOT NULL DEFAULT 0,
+            PurchasePrice REAL NOT NULL DEFAULT 0, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+            StockRequestId INTEGER)""",
+        """CREATE TABLE IF NOT EXISTS InventoryTransactions (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            BatchId INTEGER, Type INTEGER NOT NULL DEFAULT 0, Quantity INTEGER NOT NULL DEFAULT 0,
+            UnitCost REAL NOT NULL DEFAULT 0, TotalCost REAL NOT NULL DEFAULT 0,
+            RefType TEXT NOT NULL DEFAULT '', RefId INTEGER, Source TEXT,
+            Reversed INTEGER NOT NULL DEFAULT 0, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')))""",
+        """CREATE TABLE IF NOT EXISTS Routes (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, Name TEXT NOT NULL DEFAULT '',
+            Description TEXT, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS Customers (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, Name TEXT NOT NULL DEFAULT '',
+            Phone TEXT, Email TEXT, Address TEXT, RouteId INTEGER,
+            CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS Trucks (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, Name TEXT NOT NULL DEFAULT '',
+            CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS TruckStocks (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, TruckId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            Quantity INTEGER NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS Orders (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, OrderNumber TEXT NOT NULL DEFAULT '',
+            CustomerId INTEGER NOT NULL, SalesmanId INTEGER, TruckId INTEGER,
+            OrderDate TEXT NOT NULL DEFAULT (datetime('now')), DeliveryDate TEXT,
+            Status INTEGER NOT NULL DEFAULT 0, PaymentStatus INTEGER NOT NULL DEFAULT 0, Source INTEGER NOT NULL DEFAULT 0,
+            TotalAmount REAL NOT NULL DEFAULT 0, PaidAmount REAL NOT NULL DEFAULT 0, RemainingAmount REAL NOT NULL DEFAULT 0,
+            Notes TEXT, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS OrderItems (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, OrderId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            Quantity INTEGER NOT NULL DEFAULT 0, UnitPrice REAL NOT NULL DEFAULT 0, LineTotal REAL NOT NULL DEFAULT 0,
+            ReceivedStatus INTEGER NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS Payments (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, OrderId INTEGER NOT NULL, Amount REAL NOT NULL DEFAULT 0,
+            PaymentDate TEXT NOT NULL DEFAULT (datetime('now')), Method TEXT, Note TEXT)""",
+        """CREATE TABLE IF NOT EXISTS Dispatches (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId INTEGER NOT NULL, TruckLabel TEXT NOT NULL DEFAULT '',
+            Notes TEXT, DispatchDate TEXT NOT NULL DEFAULT (datetime('now')), IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS DispatchItems (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, DispatchId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            Quantity INTEGER NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS StockRequests (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, RequestNumber TEXT NOT NULL DEFAULT '', SalesmanId INTEGER,
+            Status INTEGER NOT NULL DEFAULT 0, Notes TEXT, CreatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+            TotalAmount REAL NOT NULL DEFAULT 0, PaidAmount REAL NOT NULL DEFAULT 0, RemainingAmount REAL NOT NULL DEFAULT 0,
+            PaymentStatus INTEGER NOT NULL DEFAULT 0, IsActive INTEGER NOT NULL DEFAULT 1)""",
+        """CREATE TABLE IF NOT EXISTS StockRequestItems (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, StockRequestId INTEGER NOT NULL, ItemId INTEGER NOT NULL,
+            Quantity INTEGER NOT NULL DEFAULT 0, UnitPrice REAL NOT NULL DEFAULT 0, LineTotal REAL NOT NULL DEFAULT 0)""",
+        """CREATE TABLE IF NOT EXISTS StockRequestPayments (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, StockRequestId INTEGER NOT NULL, Amount REAL NOT NULL DEFAULT 0,
+            PaymentDate TEXT NOT NULL DEFAULT (datetime('now')), Method TEXT, Note TEXT)""",
+    )
 }

@@ -45,13 +45,13 @@ class CategoryRepository {
             FROM Categories c
             $where
             ORDER BY c.CreatedAt DESC, c.Id DESC
-            OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+            LIMIT ? OFFSET ?
         """.trimIndent()
 
         val items = conn.prepareStatement(sql).use { ps ->
             val n = bind(ps, args)
-            ps.setInt(n, (safePage - 1) * pageSize)
-            ps.setInt(n + 1, pageSize)
+            ps.setInt(n, pageSize)
+            ps.setInt(n + 1, (safePage - 1) * pageSize)
             ps.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) add(
@@ -70,14 +70,15 @@ class CategoryRepository {
     }
 
     suspend fun create(name: String, description: String?): Int = Db.withConnection { conn ->
-        val sql = "INSERT INTO Categories (UserId, Name, Description, CreatedAt, IsActive) " +
-            "OUTPUT INSERTED.Id VALUES (?, ?, ?, SYSUTCDATETIME(), 1)"
-        conn.prepareStatement(sql).use { ps ->
+        conn.prepareStatement(
+            "INSERT INTO Categories (UserId, Name, Description, CreatedAt, IsActive) VALUES (?, ?, ?, datetime('now'), 1)"
+        ).use { ps ->
             ps.setInt(1, Session.userId)
             ps.setString(2, name.trim())
             ps.setString(3, description?.trim())
-            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+            ps.executeUpdate()
         }
+        Sql.lastInsertId(conn)
     }
 
     suspend fun update(id: Int, name: String, description: String?): Boolean = Db.withConnection { conn ->
