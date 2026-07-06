@@ -5,62 +5,85 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="12dp"
-    android:layout_marginVertical="6dp"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp">
+    android:layout_marginVertical="5dp"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="14dp"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/divider"
+    app:strokeWidth="1dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:padding="16dp">
+        android:orientation="vertical"
+        android:padding="14dp">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
             <TextView
                 android:id="@+id/tvOrderNo"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:textSize="15sp"
+                android:layout_weight="1"
+                android:textSize="16sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary" />
 
             <TextView
-                android:id="@+id/tvCustomer"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:id="@+id/tvStatus"
+                style="@style/StatusChip"
+                android:layout_marginStart="6dp" />
 
             <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/primary"
-                android:textSize="12sp" />
+                android:id="@+id/tvPayStatus"
+                style="@style/StatusChip"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvCustomer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
             <TextView
                 android:id="@+id/tvAmounts"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_weight="1"
                 android:textColor="@color/text_primary"
                 android:textSize="13sp" />
-        </LinearLayout>
 
-        <ImageButton
-            android:id="@+id/btnMenu"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_more"
-            android:contentDescription="Options" />
+            <ImageButton
+                android:id="@+id/btnPayments"
+                style="@style/Widget.SalesApp.IconButton"
+                android:src="@drawable/ic_payments"
+                android:contentDescription="Payments" />
+
+            <ImageButton
+                android:id="@+id/btnItems"
+                style="@style/Widget.SalesApp.IconButton"
+                android:src="@drawable/ic_checklist"
+                android:contentDescription="Line items" />
+
+            <ImageButton
+                android:id="@+id/btnMenu"
+                style="@style/Widget.SalesApp.IconButton"
+                android:src="@drawable/ic_more_vert"
+                android:contentDescription="More actions" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

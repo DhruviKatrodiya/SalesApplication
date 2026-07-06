@@ -3,12 +3,13 @@ package com.salesapp.mobile.ui.routes
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.salesapp.mobile.R
 import com.salesapp.mobile.data.models.DeliveryRoute
 import com.salesapp.mobile.databinding.ItemRouteBinding
+import com.salesapp.mobile.ui.common.Chips
 
 class RouteActions(
     val onEdit: (DeliveryRoute) -> Unit,
@@ -29,24 +30,20 @@ class RouteAdapter(private val actions: RouteActions) :
             b.tvName.text = r.name
             if (r.description.isNullOrBlank()) b.tvDescription.visibility = View.GONE
             else { b.tvDescription.visibility = View.VISIBLE; b.tvDescription.text = r.description }
-            val status = if (r.isActive) "" else "  •  Inactive"
-            b.tvMeta.text = "${r.customerCount} customers$status"
-            b.btnMenu.setOnClickListener { showMenu(it, r) }
-            b.root.setOnClickListener { actions.onEdit(r) }
-        }
+            b.tvMeta.text = "${r.customerCount} customers"
+            Chips.active(b.tvStatus, r.isActive)
 
-        private fun showMenu(anchor: View, r: DeliveryRoute) {
-            PopupMenu(anchor.context, anchor).apply {
-                menu.add("Edit")
-                if (r.isActive) menu.add("Delete") else menu.add("Activate")
-                setOnMenuItemClickListener { m ->
-                    when (m.title) {
-                        "Edit" -> actions.onEdit(r); "Delete" -> actions.onDelete(r); "Activate" -> actions.onActivate(r)
-                    }
-                    true
-                }
-                show()
+            b.btnEdit.setOnClickListener { actions.onEdit(r) }
+            if (r.isActive) {
+                b.btnToggle.setImageResource(R.drawable.ic_delete)
+                b.btnToggle.contentDescription = "Delete"
+                b.btnToggle.setOnClickListener { actions.onDelete(r) }
+            } else {
+                b.btnToggle.setImageResource(R.drawable.ic_history)
+                b.btnToggle.contentDescription = "Activate"
+                b.btnToggle.setOnClickListener { actions.onActivate(r) }
             }
+            b.root.setOnClickListener { actions.onEdit(r) }
         }
     }
 

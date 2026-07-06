@@ -1,14 +1,42 @@
 <resources>
-    <color name="primary">#1565C0</color>
-    <color name="primary_dark">#0D47A1</color>
+    <!-- Brand -->
+    <color name="primary">#0D5FCC</color>
+    <color name="primary_dark">#0A4CA3</color>
     <color name="primary_variant">#1E88E5</color>
     <color name="accent">#FF6D00</color>
+
+    <!-- Neutrals -->
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
-    <color name="bg">#FFF5F6FA</color>
-    <color name="text_primary">#FF1A1A1A</color>
-    <color name="text_secondary">#FF6B6B6B</color>
-    <color name="danger">#FFD32F2F</color>
-    <color name="success">#FF2E7D32</color>
-    <color name="chip_bg">#FFE3F2FD</color>
+    <color name="bg">#FFF7F8FC</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="card_grey">#FFF1F2F5</color>
+    <color name="field_grey">#FFE7E9EE</color>
+    <color name="divider">#FFE4E7EC</color>
+
+    <!-- Text -->
+    <color name="text_primary">#FF1A1A22</color>
+    <color name="text_secondary">#FF6B7280</color>
+    <color name="text_hint">#FF9AA0AB</color>
+
+    <!-- Semantic -->
+    <color name="danger">#FFC62828</color>
+    <color name="success">#FF1E7D34</color>
+    <color name="warning">#FFB45309</color>
+
+    <!-- Status chip fills -->
+    <color name="chip_success_bg">#FFE6F4EA</color>
+    <color name="chip_success_fg">#FF1E7D34</color>
+    <color name="chip_danger_bg">#FFFCE7E9</color>
+    <color name="chip_danger_fg">#FFC62828</color>
+    <color name="chip_warning_bg">#FFFDF0D2</color>
+    <color name="chip_warning_fg">#FF9A6A00</color>
+    <color name="chip_info_bg">#FFE3F0FF</color>
+    <color name="chip_info_fg">#FF0D5FCC</color>
+    <color name="chip_purple_bg">#FFEDE7F6</color>
+    <color name="chip_purple_fg">#FF6A3EAB</color>
+    <color name="chip_neutral_bg">#FFE8EAED</color>
+    <color name="chip_neutral_fg">#FF5F6368</color>
+
+    <color name="chip_bg">#FFE3F0FF</color>
 </resources>

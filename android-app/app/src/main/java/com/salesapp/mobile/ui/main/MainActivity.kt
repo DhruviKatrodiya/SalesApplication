@@ -60,6 +60,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Programmatic navigation used by dashboard quick-action buttons. */
+    fun goTo(menuId: Int) {
+        b.navView.setCheckedItem(menuId)
+        onNavItem(b.navView.menu.findItem(menuId))
+    }
+
     private fun onNavItem(item: android.view.MenuItem): Boolean {
         when (item.itemId) {
             R.id.nav_categories -> show(CategoriesFragment(), "Categories")

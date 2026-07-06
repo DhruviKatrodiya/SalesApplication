@@ -111,9 +111,12 @@ class ReportsFragment : Fragment(R.layout.fragment_reports) {
         ll.addView(TextView(requireContext()).apply { text = title; setTextColor(resources.getColor(R.color.text_primary, null)); textSize = 15f; setTypeface(typeface, android.graphics.Typeface.BOLD) })
         ll.addView(TextView(requireContext()).apply { text = body; setTextColor(resources.getColor(R.color.text_secondary, null)); textSize = 13f; setPadding(0, 4, 0, 0) })
         val card = com.google.android.material.card.MaterialCardView(requireContext()).apply {
-            radius = 24f; cardElevation = 2f
+            radius = 28f; cardElevation = 0f
+            setCardBackgroundColor(resources.getColor(R.color.surface, null))
+            strokeColor = resources.getColor(R.color.divider, null)
+            strokeWidth = 2
             val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lp.setMargins(0, 8, 0, 0); layoutParams = lp
+            lp.setMargins(0, 10, 0, 0); layoutParams = lp
             addView(ll)
         }
         return card

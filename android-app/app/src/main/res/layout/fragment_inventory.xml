@@ -84,6 +84,6 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:contentDescription="Add item"
-        android:src="@android:drawable/ic_input_add"
+        android:src="@drawable/ic_add"
         app:tint="@color/white" />
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

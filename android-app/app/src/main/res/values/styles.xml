@@ -1,0 +1,128 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Page title, e.g. "Dashboard", "Customers" -->
+    <style name="Text.PageTitle" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">26sp</item>
+    </style>
+
+    <!-- Card section header, e.g. "Categories", "Breakdown by Month" -->
+    <style name="Text.SectionTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <style name="Text.CardValue" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">28sp</item>
+    </style>
+
+    <style name="Text.CardLabel" parent="TextAppearance.Material3.BodyMedium">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Status / payment chips -->
+    <style name="StatusChip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingHorizontal">12dp</item>
+        <item name="android:paddingVertical">4dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/chip_success</item>
+        <item name="android:textColor">@color/chip_success_fg</item>
+    </style>
+
+    <!-- Small numeric pill (stock levels) -->
+    <style name="NumberPill">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">34dp</item>
+        <item name="android:paddingHorizontal">10dp</item>
+        <item name="android:paddingVertical">3dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/pill_green</item>
+        <item name="android:textColor">@color/chip_success_fg</item>
+    </style>
+
+    <!-- Primary filled pill button -->
+    <style name="Widget.SalesApp.Button" parent="Widget.Material3.Button">
+        <item name="cornerRadius">28dp</item>
+        <item name="android:paddingVertical">12dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="backgroundTint">@color/primary</item>
+    </style>
+
+    <!-- Outlined pill button -->
+    <style name="Widget.SalesApp.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="cornerRadius">28dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/primary</item>
+        <item name="strokeColor">@color/divider</item>
+        <item name="iconTint">@color/primary</item>
+    </style>
+
+    <!-- Small "+ Add" pill used in list headers -->
+    <style name="Widget.SalesApp.AddButton" parent="Widget.Material3.Button">
+        <item name="cornerRadius">24dp</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:minHeight">42dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="backgroundTint">@color/primary</item>
+        <item name="icon">@drawable/ic_add</item>
+        <item name="iconTint">@color/white</item>
+        <item name="iconGravity">textStart</item>
+    </style>
+
+    <!-- Add / new floating action button -->
+    <style name="Widget.SalesApp.Fab" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="backgroundTint">@color/primary</item>
+        <item name="tint">@color/white</item>
+        <item name="srcCompat">@drawable/ic_add</item>
+    </style>
+
+    <!-- Dashboard KPI card -->
+    <style name="kpiCard" parent="Widget.Material3.CardView.Elevated">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:layout_margin">6dp</item>
+        <item name="cardBackgroundColor">@color/card_grey</item>
+        <item name="cardCornerRadius">14dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">@color/divider</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="kpiInner">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:minHeight">108dp</item>
+    </style>
+
+    <style name="kpiIcon">
+        <item name="android:layout_width">26dp</item>
+        <item name="android:layout_height">26dp</item>
+    </style>
+
+    <!-- Rounded action-icon button used in list rows -->
+    <style name="Widget.SalesApp.IconButton">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:padding">8dp</item>
+    </style>
+
+</resources>

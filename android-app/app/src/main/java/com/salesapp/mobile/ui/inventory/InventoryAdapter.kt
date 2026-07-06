@@ -1,14 +1,15 @@
 package com.salesapp.mobile.ui.inventory
 
 import android.view.LayoutInflater
-import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.salesapp.mobile.R
 import com.salesapp.mobile.data.models.Item
 import com.salesapp.mobile.databinding.ItemInventoryBinding
+import com.salesapp.mobile.ui.common.Chips
 
 class InventoryActions(
     val onEdit: (Item) -> Unit,
@@ -30,36 +31,38 @@ class InventoryAdapter(private val actions: InventoryActions) :
         fun bind(i: Item) {
             b.tvName.text = i.name
             b.tvPath.text = "${i.categoryName} › ${i.subCategoryName}"
-            val unit = i.unit?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
-            val price = "₹%.2f".format(i.unitPrice)
-            val inactive = if (i.isActive) "" else "  •  Inactive"
-            b.tvMeta.text = "Stock: ${i.stockQuantity}$unit  •  Truck: ${i.dispatchStock}  •  $price$inactive"
-            b.btnMenu.setOnClickListener { showMenu(it, i) }
+            b.tvPrice.text = "₹%.2f".format(i.unitPrice)
+            b.tvUnit.text = i.unit?.takeIf { it.isNotBlank() }?.let { "Unit: $it" } ?: ""
+
+            pill(b.tvStock, i.stockQuantity, i.stockQuantity <= LOW_STOCK)
+            pill(b.tvTruck, i.dispatchStock, i.dispatchStock <= 0)
+            Chips.active(b.tvStatus, i.isActive)
+
+            b.btnHistory.setOnClickListener { actions.onPriceHistory(i) }
+            b.btnMovements.setOnClickListener { actions.onMovements(i) }
+            b.btnEdit.setOnClickListener { actions.onEdit(i) }
+            if (i.isActive) {
+                b.btnToggle.setImageResource(R.drawable.ic_delete)
+                b.btnToggle.contentDescription = "Delete"
+                b.btnToggle.setOnClickListener { actions.onDelete(i) }
+            } else {
+                b.btnToggle.setImageResource(R.drawable.ic_history)
+                b.btnToggle.contentDescription = "Activate"
+                b.btnToggle.setOnClickListener { actions.onActivate(i) }
+            }
             b.root.setOnClickListener { actions.onEdit(i) }
         }
 
-        private fun showMenu(anchor: View, i: Item) {
-            PopupMenu(anchor.context, anchor).apply {
-                menu.add("Edit")
-                menu.add("Price history")
-                menu.add("Movements")
-                if (i.isActive) menu.add("Delete") else menu.add("Activate")
-                setOnMenuItemClickListener { m ->
-                    when (m.title) {
-                        "Edit" -> actions.onEdit(i)
-                        "Price history" -> actions.onPriceHistory(i)
-                        "Movements" -> actions.onMovements(i)
-                        "Delete" -> actions.onDelete(i)
-                        "Activate" -> actions.onActivate(i)
-                    }
-                    true
-                }
-                show()
-            }
+        private fun pill(tv: android.widget.TextView, value: Int, low: Boolean) {
+            tv.text = value.toString()
+            tv.setBackgroundResource(if (low) R.drawable.pill_red else R.drawable.pill_green)
+            tv.setTextColor(ContextCompat.getColor(tv.context,
+                if (low) R.color.chip_danger_fg else R.color.chip_success_fg))
         }
     }
 
     companion object {
+        private const val LOW_STOCK = 10
         private val DIFF = object : DiffUtil.ItemCallback<Item>() {
             override fun areItemsTheSame(a: Item, b: Item) = a.id == b.id
             override fun areContentsTheSame(a: Item, b: Item) = a == b

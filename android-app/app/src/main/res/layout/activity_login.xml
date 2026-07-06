@@ -3,54 +3,69 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/primary">
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="28dp">
-
-        <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:src="@drawable/ic_launcher"
-            android:layout_marginBottom="12dp"
-            android:contentDescription="@string/app_name" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/white"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Sign in to continue"
-            android:textColor="#CCFFFFFF"
-            android:layout_marginBottom="24dp" />
+        android:padding="24dp">
 
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="8dp">
+            app:cardCornerRadius="20dp"
+            app:cardElevation="6dp"
+            app:cardBackgroundColor="#F4F4F6">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="26dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🏪"
+                        android:textSize="26sp"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/app_name"
+                        android:textColor="@color/text_primary"
+                        android:textSize="28sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="6dp"
+                    android:text="Sign in to your account"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="15sp" />
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.Material3.TextInputLayout.FilledBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="26dp"
+                    app:boxBackgroundColor="@color/field_grey"
+                    app:endIconMode="custom"
+                    app:endIconDrawable="@drawable/ic_email"
+                    app:endIconTint="@color/text_secondary"
                     android:hint="Email">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etEmail"
@@ -60,10 +75,11 @@
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    style="@style/Widget.Material3.TextInputLayout.FilledBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="14dp"
+                    app:boxBackgroundColor="@color/field_grey"
                     app:passwordToggleEnabled="true"
                     android:hint="Password">
                     <com.google.android.material.textfield.TextInputEditText
@@ -75,10 +91,11 @@
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnLogin"
+                    style="@style/Widget.SalesApp.Button"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:text="Sign in" />
+                    android:layout_marginTop="24dp"
+                    android:text="Login" />
 
                 <ProgressBar
                     android:id="@+id/progress"
@@ -89,22 +106,56 @@
                     android:visibility="gone" />
 
                 <TextView
+                    android:id="@+id/tvForgot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="18dp"
+                    android:padding="6dp"
+                    android:text="Forgot password?"
+                    android:textColor="@color/primary"
+                    android:textSize="15sp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="New here? "
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/tvRegister"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Create an account"
+                        android:textColor="@color/primary"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <TextView
                     android:id="@+id/tvError"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:textColor="@color/danger"
                     android:gravity="center" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:textColor="@color/text_hint"
+                    android:textSize="12sp"
+                    android:gravity="center"
+                    android:text="Default login: sales@salesapp.com / Sales@123" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="#CCFFFFFF"
-            android:textSize="12sp"
-            android:gravity="center"
-            android:text="Default login: sales@salesapp.com / Sales@123" />
     </LinearLayout>
 </ScrollView>

@@ -11,6 +11,7 @@ import com.salesapp.mobile.data.models.Order
 import com.salesapp.mobile.data.models.OrderSource
 import com.salesapp.mobile.data.models.OrderStatus
 import com.salesapp.mobile.databinding.ItemOrderBinding
+import com.salesapp.mobile.ui.common.Chips
 
 class OrderActions(
     val onEdit: (Order) -> Unit,
@@ -38,8 +39,11 @@ class OrderAdapter(private val actions: OrderActions) :
             b.tvOrderNo.text = o.orderNumber
             val src = if (o.source == OrderSource.Dispatch) "Dispatch${o.truckName?.let { " · $it" } ?: ""}" else "Inventory"
             b.tvCustomer.text = "${o.customerName}  ·  $src"
-            b.tvStatus.text = "${o.status.label} / ${o.paymentStatus.label}"
-            b.tvAmounts.text = "Total ₹%.2f  ·  Paid ₹%.2f  ·  Due ₹%.2f".format(o.totalAmount, o.paidAmount, o.remainingAmount)
+            Chips.orderStatus(b.tvStatus, o.status.label)
+            Chips.paymentStatus(b.tvPayStatus, o.paymentStatus.label)
+            b.tvAmounts.text = "Total ₹%.2f  ·  Due ₹%.2f".format(o.totalAmount, o.remainingAmount)
+            b.btnPayments.setOnClickListener { actions.onPayments(o) }
+            b.btnItems.setOnClickListener { actions.onItems(o) }
             b.btnMenu.setOnClickListener { showMenu(it, o) }
             b.root.setOnClickListener { actions.onItems(o) }
         }

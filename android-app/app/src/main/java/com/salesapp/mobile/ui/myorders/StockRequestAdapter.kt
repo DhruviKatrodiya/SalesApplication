@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.salesapp.mobile.data.models.StockRequest
 import com.salesapp.mobile.data.models.StockRequestStatus
 import com.salesapp.mobile.databinding.ItemStockRequestBinding
+import com.salesapp.mobile.ui.common.Chips
 
 class StockRequestActions(
     val onFulfill: (StockRequest) -> Unit,
@@ -35,9 +36,11 @@ class StockRequestAdapter(private val actions: StockRequestActions) :
     inner class VH(private val b: ItemStockRequestBinding) : RecyclerView.ViewHolder(b.root) {
         fun bind(r: StockRequest) {
             b.tvNumber.text = r.requestNumber
-            b.tvStatus.text = "${r.status.label} / ${r.paymentStatus.label}" + if (!r.isActive) "  •  Inactive" else ""
+            Chips.requestStatus(b.tvStatus, if (r.isActive) r.status.label else "Inactive")
+            Chips.paymentStatus(b.tvPayStatus, r.paymentStatus.label)
             b.tvItems.text = if (r.items.isEmpty()) "" else r.items.joinToString("  ·  ") { "${it.itemName} ×${it.quantity}" }
-            b.tvAmounts.text = "Total ₹%.2f  ·  Paid ₹%.2f  ·  Due ₹%.2f".format(r.totalAmount, r.paidAmount, r.remainingAmount)
+            b.tvAmounts.text = "Total ₹%.2f  ·  Due ₹%.2f".format(r.totalAmount, r.remainingAmount)
+            b.btnPayments.setOnClickListener { actions.onPayments(r) }
             b.btnMenu.setOnClickListener { showMenu(it, r) }
         }
 
