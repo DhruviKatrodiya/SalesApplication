@@ -20,7 +20,32 @@
         </activity>
 
         <activity
+            android:name=".ui.login.RegisterActivity"
+            android:theme="@style/Theme.SalesApp.Login"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.login.ForgotPasswordActivity"
+            android:theme="@style/Theme.SalesApp.Login"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.login.ResetPasswordActivity"
+            android:theme="@style/Theme.SalesApp.Login"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.main.MainActivity"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -117,7 +117,7 @@
     </style>
 
     <!-- Rounded action-icon button used in list rows -->
-    <style name="Widget.SalesApp.IconButton">
+    <style name="Widget.SalesApp.IconButton" parent="">
         <item name="android:layout_width">40dp</item>
         <item name="android:layout_height">40dp</item>
         <item name="android:background">?attr/selectableItemBackgroundBorderless</item>

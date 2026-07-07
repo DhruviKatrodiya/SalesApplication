@@ -22,18 +22,10 @@ class LoginActivity : AppCompatActivity() {
         setContentView(b.root)
         b.btnLogin.setOnClickListener { attemptLogin() }
         b.tvForgot.setOnClickListener {
-            android.widget.Toast.makeText(
-                this,
-                "This device stores data offline. Reset your password from Profile → Change password after signing in.",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
+            startActivity(Intent(this, ForgotPasswordActivity::class.java))
         }
         b.tvRegister.setOnClickListener {
-            android.widget.Toast.makeText(
-                this,
-                "Use the seeded account: sales@salesapp.com / Sales@123",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
+            startActivity(Intent(this, RegisterActivity::class.java))
         }
     }
 

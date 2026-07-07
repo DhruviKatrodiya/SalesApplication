@@ -22,6 +22,7 @@ class OrderActions(
     val onApplyAdvance: (Order) -> Unit,
     val onStatus: (Order) -> Unit,
     val onCancel: (Order) -> Unit,
+    val onInvoice: (Order) -> Unit,
     val onDelete: (Order) -> Unit,
     val onActivate: (Order) -> Unit,
 )
@@ -60,6 +61,7 @@ class OrderAdapter(private val actions: OrderActions) :
                     menu.add("Change status")
                     menu.add("Edit")
                     menu.add("Cancel order")
+                    menu.add("Download invoice")
                 }
                 if (o.isActive) menu.add("Delete") else menu.add("Activate")
                 setOnMenuItemClickListener { m ->
@@ -72,6 +74,7 @@ class OrderAdapter(private val actions: OrderActions) :
                         "Change status" -> actions.onStatus(o)
                         "Edit" -> actions.onEdit(o)
                         "Cancel order" -> actions.onCancel(o)
+                        "Download invoice" -> actions.onInvoice(o)
                         "Delete" -> actions.onDelete(o)
                         "Activate" -> actions.onActivate(o)
                     }

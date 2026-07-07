@@ -14,9 +14,11 @@
         android:background="@drawable/bg_avatar_circle">
 
         <ImageView
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:id="@+id/ivNavAvatar"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
             android:layout_gravity="center"
+            android:scaleType="centerCrop"
             android:src="@drawable/ic_account_circle"
             app:tint="@color/white"
             android:contentDescription="@string/app_name" />

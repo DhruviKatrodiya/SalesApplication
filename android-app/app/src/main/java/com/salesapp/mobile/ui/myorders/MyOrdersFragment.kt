@@ -157,9 +157,37 @@ class MyOrdersFragment : Fragment(R.layout.fragment_my_orders) {
     private fun showPayments(r: StockRequest) {
         lifecycleScope.launch {
             val list = runCatching { payments.byRequest(r.id) }.getOrElse { toast("Load failed: ${it.message}"); return@launch }
-            val text = if (list.isEmpty()) "No payments recorded."
-            else list.joinToString("\n") { "₹%.2f  ·  ${it.method ?: "—"}${it.note?.let { n -> " · $n" } ?: ""}".format(it.amount) }
-            MaterialAlertDialogBuilder(requireContext()).setTitle("${r.requestNumber} — payments").setMessage(text).setPositiveButton("Close", null).show()
+            if (list.isEmpty()) {
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("${r.requestNumber} — payments").setMessage("No payments recorded yet.").setPositiveButton("Close", null).show()
+                return@launch
+            }
+            val labels = list.map { p ->
+                "₹%.2f · ${p.method ?: "—"} · ${p.paymentDate?.take(10) ?: ""}${p.note?.let { " · $it" } ?: ""}".format(p.amount)
+            }.toTypedArray()
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("${r.requestNumber} — payments")
+                .setItems(labels) { _, which ->
+                    val p = list[which]
+                    if (p.method == "Advance" || p.method == "AdvanceTransfer") {
+                        toast("Advance entries can't be deleted.")
+                    } else {
+                        MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Delete payment")
+                            .setMessage("Remove this ₹%.2f payment?".format(p.amount))
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Delete") { _, _ ->
+                                lifecycleScope.launch {
+                                    payments.deletePayment(p.id).fold(
+                                        onSuccess = { toast("Payment removed."); load() },
+                                        onFailure = { toast(it.message ?: "Delete failed.") },
+                                    )
+                                }
+                            }.show()
+                    }
+                }
+                .setPositiveButton("Close", null)
+                .show()
         }
     }
 

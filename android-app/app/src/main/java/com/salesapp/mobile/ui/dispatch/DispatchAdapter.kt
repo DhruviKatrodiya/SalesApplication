@@ -11,6 +11,7 @@ import com.salesapp.mobile.databinding.ItemDispatchBinding
 import com.salesapp.mobile.ui.common.Chips
 
 class DispatchActions(
+    val onEdit: (Dispatch) -> Unit,
     val onDelete: (Dispatch) -> Unit,
     val onActivate: (Dispatch) -> Unit,
 )
@@ -30,6 +31,8 @@ class DispatchAdapter(private val actions: DispatchActions) :
             b.tvItems.text = if (d.items.isEmpty()) "No items"
             else d.items.joinToString("  ·  ") { "${it.itemName} ×${it.quantity}" }
             Chips.active(b.tvStatus, d.isActive)
+            b.btnEdit.visibility = if (d.isActive) android.view.View.VISIBLE else android.view.View.GONE
+            b.btnEdit.setOnClickListener { actions.onEdit(d) }
             if (d.isActive) {
                 b.btnToggle.setImageResource(R.drawable.ic_delete)
                 b.btnToggle.contentDescription = "Delete"

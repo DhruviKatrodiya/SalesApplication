@@ -139,5 +139,9 @@ object Db {
         """CREATE TABLE IF NOT EXISTS StockRequestPayments (
             Id INTEGER PRIMARY KEY AUTOINCREMENT, StockRequestId INTEGER NOT NULL, Amount REAL NOT NULL DEFAULT 0,
             PaymentDate TEXT NOT NULL DEFAULT (datetime('now')), Method TEXT, Note TEXT)""",
+        """CREATE TABLE IF NOT EXISTS PasswordResetOtps (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT, Email TEXT NOT NULL, OtpHash TEXT NOT NULL,
+            ExpiresAt TEXT NOT NULL, IsUsed INTEGER NOT NULL DEFAULT 0,
+            CreatedAt TEXT NOT NULL DEFAULT (datetime('now')))""",
     )
 }

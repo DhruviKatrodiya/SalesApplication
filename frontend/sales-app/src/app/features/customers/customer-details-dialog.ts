@@ -54,8 +54,8 @@ import { CustomerSearchResult, Order, OrderStatusLabels, PaymentStatusLabels } f
             <mat-expansion-panel-header>
               <mat-panel-title>{{ o.orderNumber }}</mat-panel-title>
               <mat-panel-description>
-                <span [class]="statusChipClass(o.status)">{{ orderStatusLabel[o.status] }}</span>
-                <span [class]="payChipClass(o.paymentStatus)" style="margin-left:8px">{{ paymentStatusLabel[o.paymentStatus] }}</span>
+                <span [class]="statusChipClass(o.status)" matTooltip="Order Status">{{ orderStatusLabel[o.status] }}</span>
+                <span [class]="payChipClass(o.paymentStatus)" style="margin-left:8px" matTooltip="Payment Status">{{ paymentStatusLabel[o.paymentStatus] }}</span>
                 <span style="margin-left:auto">{{ o.totalAmount | currency:'INR' }}</span>
                 <button mat-icon-button matTooltip="Download Invoice (PDF)" style="margin-left:8px"
                         (click)="downloadInvoice(o); $event.stopPropagation()">

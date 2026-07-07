@@ -45,18 +45,38 @@ class MainActivity : AppCompatActivity() {
         b.drawerLayout.addDrawerListener(toggle)
         toggle.syncState()
 
-        // Fill the drawer header with the signed-in user.
-        val header = b.navView.getHeaderView(0)
-        header.findViewById<android.widget.TextView>(R.id.tvUserName)?.text =
-            Session.currentUser?.fullName
-        header.findViewById<android.widget.TextView>(R.id.tvUserEmail)?.text =
-            Session.currentUser?.email
+        refreshHeader()
 
         b.navView.setNavigationItemSelectedListener { onNavItem(it) }
 
         if (savedInstanceState == null) {
             b.navView.setCheckedItem(R.id.nav_dashboard)
             show(DashboardFragment(), "Dashboard")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Reflect profile edits (name/email/avatar) made on the Profile screen.
+        if (Session.isLoggedIn()) refreshHeader()
+    }
+
+    /** Fill the drawer header with the signed-in user's name, email and avatar. */
+    private fun refreshHeader() {
+        val header = b.navView.getHeaderView(0)
+        header.findViewById<android.widget.TextView>(R.id.tvUserName)?.text = Session.currentUser?.fullName
+        header.findViewById<android.widget.TextView>(R.id.tvUserEmail)?.text = Session.currentUser?.email
+        val avatar = header.findViewById<android.widget.ImageView>(R.id.ivNavAvatar) ?: return
+        val path = Session.currentUser?.profileImagePath
+        val bmp = if (!path.isNullOrBlank() && java.io.File(path).exists())
+            runCatching {
+                android.graphics.BitmapFactory.decodeFile(path, android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 })
+            }.getOrNull() else null
+        if (bmp != null) {
+            avatar.imageTintList = null
+            avatar.setImageBitmap(bmp)
+        } else {
+            avatar.setImageResource(R.drawable.ic_account_circle)
         }
     }
 

@@ -33,6 +33,7 @@ class DispatchFragment : Fragment(R.layout.fragment_dispatch) {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         _b = FragmentDispatchBinding.bind(view)
         adapter = DispatchAdapter(DispatchActions(
+            onEdit = { showEditDispatch(it) },
             onDelete = { confirmDelete(it) },
             onActivate = { activate(it) },
         ))
@@ -57,44 +58,54 @@ class DispatchFragment : Fragment(R.layout.fragment_dispatch) {
 
     private class Row(val ac: MaterialAutoCompleteTextView, val qty: TextInputEditText, var itemId: Int?)
 
-    private fun showNewDispatch() {
+    private fun showNewDispatch() = openDispatchDialog(null)
+    private fun showEditDispatch(d: Dispatch) = openDispatchDialog(d)
+
+    private fun openDispatchDialog(existing: Dispatch?) {
         lifecycleScope.launch {
             val items = runCatching { itemsRepo.list(active = "active").items }.getOrElse { toast("Load items failed: ${it.message}"); return@launch }
             if (items.isEmpty()) { toast("Add an item first."); return@launch }
             val trucks = runCatching { trucksRepo.list(active = "active").items.map { it.name } }.getOrDefault(emptyList())
-            renderNewDispatch(items, trucks)
+            renderDispatchDialog(existing, items, trucks)
         }
     }
 
-    private fun renderNewDispatch(items: List<Item>, truckNames: List<String>) {
+    private fun renderDispatchDialog(existing: Dispatch?, items: List<Item>, truckNames: List<String>) {
         val view = layoutInflater.inflate(R.layout.dialog_dispatch, null)
         val acTruck = view.findViewById<MaterialAutoCompleteTextView>(R.id.acTruck)
         val etNotes = view.findViewById<TextInputEditText>(R.id.etNotes)
         val container = view.findViewById<LinearLayout>(R.id.lineContainer)
 
         acTruck.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, truckNames))
-        if (truckNames.isNotEmpty()) acTruck.setText(truckNames.first(), false)
+        when {
+            existing != null -> acTruck.setText(existing.truckLabel, false)
+            truckNames.isNotEmpty() -> acTruck.setText(truckNames.first(), false)
+        }
+        etNotes.setText(existing?.notes)
 
         val itemLabels = items.map { "${it.name} (stock ${it.stockQuantity})" }
         val rows = mutableListOf<Row>()
-        fun addRow() {
+        fun addRow(itemId: Int?, qty: Int?) {
             val row = LayoutInflater.from(requireContext()).inflate(R.layout.row_dispatch_line, container, false)
             val ac = row.findViewById<MaterialAutoCompleteTextView>(R.id.acItem)
             val etQty = row.findViewById<TextInputEditText>(R.id.etQty)
             ac.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, itemLabels))
-            val r = Row(ac, etQty, null)
+            val r = Row(ac, etQty, itemId)
+            itemId?.let { id -> items.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let { ac.setText(itemLabels[it], false) } }
+            qty?.let { etQty.setText(it.toString()) }
             ac.setOnItemClickListener { _, _, pos, _ -> r.itemId = items[pos].id }
             row.findViewById<View>(R.id.btnRemove).setOnClickListener { container.removeView(row); rows.remove(r) }
             rows.add(r); container.addView(row)
         }
-        addRow()
-        view.findViewById<View>(R.id.btnAddLine).setOnClickListener { addRow() }
+        if (existing == null || existing.items.isEmpty()) addRow(null, null)
+        else existing.items.forEach { addRow(it.itemId, it.quantity) }
+        view.findViewById<View>(R.id.btnAddLine).setOnClickListener { addRow(null, null) }
 
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("New dispatch")
+            .setTitle(if (existing == null) "New dispatch" else "Edit dispatch")
             .setView(view)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Record") { _, _ ->
+            .setPositiveButton(if (existing == null) "Record" else "Save") { _, _ ->
                 val lines = rows.mapNotNull { r ->
                     val id = r.itemId ?: return@mapNotNull null
                     val q = r.qty.text?.toString()?.toIntOrNull() ?: return@mapNotNull null
@@ -102,9 +113,13 @@ class DispatchFragment : Fragment(R.layout.fragment_dispatch) {
                     id to q
                 }
                 if (lines.isEmpty()) { toast("Add at least one item."); return@setPositiveButton }
+                val truck = acTruck.text?.toString()?.trim()
+                val notes = etNotes.text?.toString()?.trim()
                 lifecycleScope.launch {
-                    repo.create(acTruck.text?.toString()?.trim(), etNotes.text?.toString()?.trim(), lines).fold(
-                        onSuccess = { toast("Dispatch recorded."); load() },
+                    val result = if (existing == null) repo.create(truck, notes, lines).map { }
+                    else repo.update(existing.id, truck, notes, lines)
+                    result.fold(
+                        onSuccess = { toast(if (existing == null) "Dispatch recorded." else "Dispatch updated. Stock adjusted."); load() },
                         onFailure = { toast(it.message ?: "Failed.") },
                     )
                 }

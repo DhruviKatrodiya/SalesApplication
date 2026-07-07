@@ -18,17 +18,19 @@ class ProfileRepository {
     }
 
     /** Update profile; rejects an email already used by another account. */
-    suspend fun update(fullName: String, email: String, phone: String?): Result<User> = Db.withConnection { conn ->
+    suspend fun update(fullName: String, email: String, phone: String?, profileImagePath: String?): Result<User> = Db.withConnection { conn ->
         val e = email.trim()
         if (e.isEmpty()) return@withConnection Result.failure(IllegalArgumentException("Email is required."))
         val taken = conn.prepareStatement("SELECT 1 FROM Users WHERE Id <> ? AND Email = ?").use { ps ->
             ps.setInt(1, Session.userId); ps.setString(2, e); ps.executeQuery().use { it.next() }
         }
         if (taken) return@withConnection Result.failure(IllegalStateException("That email address is already in use."))
-        conn.prepareStatement("UPDATE Users SET FullName = ?, Email = ?, Phone = ? WHERE Id = ?").use { ps ->
-            ps.setString(1, fullName.trim()); ps.setString(2, e); ps.setString(3, phone?.trim()); ps.setInt(4, Session.userId)
+        val img = profileImagePath?.trim()?.ifEmpty { null }
+        conn.prepareStatement("UPDATE Users SET FullName = ?, Email = ?, Phone = ?, ProfileImagePath = ? WHERE Id = ?").use { ps ->
+            ps.setString(1, fullName.trim()); ps.setString(2, e); ps.setString(3, phone?.trim())
+            ps.setString(4, img); ps.setInt(5, Session.userId)
             ps.executeUpdate()
         }
-        Result.success(User(Session.userId, fullName.trim(), e, phone?.trim(), Session.currentUser?.profileImagePath))
+        Result.success(User(Session.userId, fullName.trim(), e, phone?.trim(), img))
     }
 }

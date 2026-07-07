@@ -102,6 +102,43 @@ class DispatchRepository {
         } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
     }
 
+    /**
+     * Edit an active dispatch (mirrors DispatchController.Update): reverse the current stock effects
+     * back to the godown, validate the new lines against restored availability, then re-consume FIFO
+     * onto the (possibly new) truck.
+     */
+    suspend fun update(id: Int, truckLabel: String?, notes: String?, lines: List<Pair<Int, Int>>): Result<Unit> = Db.withConnection { conn ->
+        val d = head(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Dispatch not found."))
+        if (d.userId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your dispatch."))
+        if (!d.isActive) return@withConnection Result.failure(IllegalStateException("Reactivate the dispatch before editing."))
+        if (lines.isEmpty()) return@withConnection Result.failure(IllegalArgumentException("At least one item is required."))
+        conn.autoCommit = false
+        try {
+            // 1. Return the currently-loaded stock to the godown.
+            reverseStock(conn, id, d.truckLabel)
+            // 2. Validate the new lines against restored godown stock.
+            for ((itemId, qty) in lines) {
+                val item = itemRow(conn, itemId, d.userId) ?: throw IllegalArgumentException("Item $itemId not found.")
+                if (qty <= 0) throw IllegalArgumentException("Quantity for '${item.first}' must be greater than zero.")
+                if (item.second < qty) throw IllegalStateException("Insufficient stock for '${item.first}'. Available: ${item.second}, requested: $qty.")
+            }
+            // 3. Update header + rebuild lines.
+            val truck = truckLabel?.trim().takeUnless { it.isNullOrEmpty() } ?: "Truck-1"
+            conn.prepareStatement("UPDATE Dispatches SET TruckLabel = ?, Notes = ? WHERE Id = ?").use { ps ->
+                ps.setString(1, truck); ps.setString(2, notes); ps.setInt(3, id); ps.executeUpdate()
+            }
+            conn.prepareStatement("DELETE FROM DispatchItems WHERE DispatchId = ?").use { ps -> ps.setInt(1, id); ps.executeUpdate() }
+            val truckId = ensureTruck(conn, d.userId, truck)
+            for ((itemId, qty) in lines) {
+                InventoryOps.consumeFifo(conn, itemId, qty, "Dispatch", id, truck)
+                InventoryOps.adjustDispatchStock(conn, itemId, qty)
+                addTruckStock(conn, truckId, itemId, qty)
+                mergeDispatchLine(conn, id, itemId, qty)
+            }
+            conn.commit(); Result.success(Unit)
+        } catch (e: Exception) { conn.rollback(); Result.failure(e) } finally { conn.autoCommit = true }
+    }
+
     suspend fun activate(id: Int): Result<Unit> = Db.withConnection { conn ->
         val d = head(conn, id) ?: return@withConnection Result.failure(IllegalArgumentException("Dispatch not found."))
         if (d.userId != Session.userId) return@withConnection Result.failure(IllegalStateException("Not your dispatch."))

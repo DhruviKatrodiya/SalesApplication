@@ -19,6 +19,7 @@ import com.salesapp.mobile.data.models.Customer
 import com.salesapp.mobile.data.models.CustomerSearchResult
 import com.salesapp.mobile.data.models.DeliveryRoute
 import com.salesapp.mobile.data.repo.CustomerRepository
+import com.salesapp.mobile.data.repo.InvoiceService
 import com.salesapp.mobile.data.repo.RouteRepository
 import com.salesapp.mobile.databinding.FragmentCustomersBinding
 import kotlinx.coroutines.Job
@@ -31,6 +32,7 @@ class CustomersFragment : Fragment(R.layout.fragment_customers) {
     private val b get() = _b!!
     private val repo = CustomerRepository()
     private val routeRepo = RouteRepository()
+    private val invoiceService = InvoiceService()
     private lateinit var adapter: CustomerAdapter
     private var searchJob: Job? = null
     private var search: String? = null
@@ -107,12 +109,18 @@ class CustomersFragment : Fragment(R.layout.fragment_customers) {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save") { _, _ ->
                 val name = etName.text?.toString()?.trim().orEmpty()
+                val phone = etPhone.text?.toString()?.trim().orEmpty()
+                val email = etEmail.text?.toString()?.trim().orEmpty()
+                val address = etAddress.text?.toString()?.trim().orEmpty()
                 if (name.isEmpty()) { toast("Name is required."); return@setPositiveButton }
-                save(
-                    existing, name,
-                    etPhone.text?.toString()?.trim(), etEmail.text?.toString()?.trim(),
-                    etAddress.text?.toString()?.trim(), selectedRoute?.id,
-                )
+                if (phone.isNotEmpty() && !phone.matches(Regex("^\\d{7,15}$"))) {
+                    toast("Enter a valid phone number (7–15 digits)."); return@setPositiveButton
+                }
+                if (email.isNotEmpty() && !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    toast("Enter a valid email address."); return@setPositiveButton
+                }
+                if (address.isEmpty()) { toast("Address is required."); return@setPositiveButton }
+                save(existing, name, phone.ifEmpty { null }, email.ifEmpty { null }, address, selectedRoute?.id)
             }
             .show()
     }
@@ -159,10 +167,12 @@ class CustomersFragment : Fragment(R.layout.fragment_customers) {
         val container = view.findViewById<LinearLayout>(R.id.orderContainer)
         if (d.orders.isEmpty()) container.addView(line("No orders yet."))
         else d.orders.forEach { o ->
-            container.addView(line(
+            val row = line(
                 "• ${o.orderNumber}  ·  ${o.status.label}/${o.paymentStatus.label}\n" +
-                    "   ₹%.2f  (paid ₹%.2f, due ₹%.2f)".format(o.totalAmount, o.paidAmount, o.remainingAmount)
-            ))
+                    "   ₹%.2f  (paid ₹%.2f, due ₹%.2f)\n   Tap to share invoice ↓".format(o.totalAmount, o.paidAmount, o.remainingAmount)
+            )
+            row.setOnClickListener { shareInvoice(o.id, o.orderNumber, o.customerName) }
+            container.addView(row)
         }
 
         MaterialAlertDialogBuilder(requireContext())
@@ -170,6 +180,24 @@ class CustomersFragment : Fragment(R.layout.fragment_customers) {
             .setView(view)
             .setPositiveButton("Close", null)
             .show()
+    }
+
+    private fun shareInvoice(orderId: Int, orderNumber: String, customerName: String) {
+        lifecycleScope.launch {
+            val file = runCatching { invoiceService.generate(requireContext(), orderId) }
+                .getOrElse { toast(it.message ?: "Could not generate the invoice PDF."); return@launch }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                requireContext(), "${requireContext().packageName}.fileprovider", file
+            )
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Invoice $orderNumber")
+                putExtra(android.content.Intent.EXTRA_TEXT, "Invoice $orderNumber for $customerName")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(android.content.Intent.createChooser(send, "Invoice $orderNumber"))
+        }
     }
 
     private fun line(text: String) = TextView(requireContext()).apply {

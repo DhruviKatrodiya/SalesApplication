@@ -27,6 +27,7 @@ import com.salesapp.mobile.data.models.Truck
 import com.salesapp.mobile.data.repo.CustomerRepository
 import com.salesapp.mobile.data.repo.ItemRepository
 import com.salesapp.mobile.data.repo.OrderLine
+import com.salesapp.mobile.data.repo.InvoiceService
 import com.salesapp.mobile.data.repo.OrderRepository
 import com.salesapp.mobile.data.repo.PaymentRepository
 import com.salesapp.mobile.data.repo.TruckRepository
@@ -45,6 +46,7 @@ class OrdersFragment : Fragment(R.layout.fragment_orders) {
     private val customersRepo = CustomerRepository()
     private val trucksRepo = TruckRepository()
     private val itemsRepo = ItemRepository()
+    private val invoiceService = InvoiceService()
 
     private lateinit var adapter: OrderAdapter
     private var searchJob: Job? = null
@@ -64,6 +66,7 @@ class OrdersFragment : Fragment(R.layout.fragment_orders) {
             onApplyAdvance = { applyAdvance(it) },
             onStatus = { showStatus(it) },
             onCancel = { confirmCancel(it) },
+            onInvoice = { shareInvoice(it) },
             onDelete = { confirmDelete(it) },
             onActivate = { activate(it) },
         ))
@@ -268,11 +271,56 @@ class OrdersFragment : Fragment(R.layout.fragment_orders) {
     private fun showPayments(o: Order) {
         lifecycleScope.launch {
             val list = runCatching { payments.byOrder(o.id) }.getOrElse { toast("Load failed: ${it.message}"); return@launch }
-            val text = if (list.isEmpty()) "No payments recorded."
-            else list.joinToString("\n") { p ->
-                "₹%.2f  ·  ${p.method ?: "—"}${p.note?.let { " · $it" } ?: ""}".format(p.amount)
+            if (list.isEmpty()) {
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle("${o.orderNumber} — payments").setMessage("No payments recorded yet.").setPositiveButton("Close", null).show()
+                return@launch
             }
-            MaterialAlertDialogBuilder(requireContext()).setTitle("${o.orderNumber} — payments").setMessage(text).setPositiveButton("Close", null).show()
+            val labels = list.map { p ->
+                "₹%.2f · ${p.method ?: "—"} · ${p.paymentDate?.take(10) ?: ""}${p.note?.let { " · $it" } ?: ""}".format(p.amount)
+            }.toTypedArray()
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("${o.orderNumber} — payments")
+                .setItems(labels) { _, which ->
+                    val p = list[which]
+                    // The website only allows deleting non-advance payments.
+                    if (p.method == "Advance" || p.method == "AdvanceTransfer") {
+                        toast("Advance entries can't be deleted.")
+                    } else {
+                        MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Delete payment")
+                            .setMessage("Remove this ₹%.2f payment?".format(p.amount))
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Delete") { _, _ ->
+                                lifecycleScope.launch {
+                                    payments.deletePayment(p.id).fold(
+                                        onSuccess = { toast("Payment removed."); load() },
+                                        onFailure = { toast(it.message ?: "Delete failed.") },
+                                    )
+                                }
+                            }.show()
+                    }
+                }
+                .setPositiveButton("Close", null)
+                .show()
+        }
+    }
+
+    private fun shareInvoice(o: Order) {
+        lifecycleScope.launch {
+            val file = runCatching { invoiceService.generate(requireContext(), o.id) }
+                .getOrElse { toast(it.message ?: "Could not generate the invoice PDF."); return@launch }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                requireContext(), "${requireContext().packageName}.fileprovider", file
+            )
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "Invoice ${o.orderNumber}")
+                o.customerName.let { putExtra(android.content.Intent.EXTRA_TEXT, "Invoice ${o.orderNumber} for $it") }
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(android.content.Intent.createChooser(send, "Invoice ${o.orderNumber}"))
         }
     }
 

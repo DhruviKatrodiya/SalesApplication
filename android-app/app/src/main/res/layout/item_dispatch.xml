@@ -62,6 +62,12 @@
                 android:textSize="13sp" />
 
             <ImageButton
+                android:id="@+id/btnEdit"
+                style="@style/Widget.SalesApp.IconButton"
+                android:src="@drawable/ic_edit"
+                android:contentDescription="Edit" />
+
+            <ImageButton
                 android:id="@+id/btnToggle"
                 style="@style/Widget.SalesApp.IconButton"
                 android:src="@drawable/ic_delete"
