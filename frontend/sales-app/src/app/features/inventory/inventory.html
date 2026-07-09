@@ -7,21 +7,9 @@
   <mat-card class="table-card">
     <mat-card-content>
       <div class="search-grid">
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Category</mat-label>
-          <input matInput [ngModel]="categoryFilter()" (ngModelChange)="setCategoryFilter($event)" placeholder="category name" />
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
-
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Item</mat-label>
-          <input matInput [ngModel]="itemFilter()" (ngModelChange)="setItemFilter($event)" placeholder="item name" />
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
-
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>SKU</mat-label>
-          <input matInput [ngModel]="skuFilter()" (ngModelChange)="setSkuFilter($event)" placeholder="SKU" />
+        <mat-form-field class="search-box" appearance="fill" subscriptSizing="dynamic">
+          <mat-label>Search</mat-label>
+          <input matInput [ngModel]="search()" (ngModelChange)="setSearch($event)" placeholder="Search by item name, SKU, or category" />
           <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
@@ -98,7 +86,7 @@
             @if (i.isActive) {
               <button mat-icon-button title="Delete" (click)="remove(i)"><mat-icon>delete</mat-icon></button>
             } @else {
-              <button mat-icon-button title="Activate" (click)="activate(i)"><mat-icon>restore</mat-icon></button>
+              <button mat-icon-button title="Activate" (click)="activate(i)"><mat-icon>check_circle</mat-icon></button>
             }
           </td>
         </ng-container>

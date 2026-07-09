@@ -34,6 +34,8 @@ import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
       margin-bottom: 16px;
     }
     .search-grid mat-form-field { width: 100%; }
+    .search-grid .search-box { grid-column: span 3; }
+    @media (max-width: 800px) { .search-grid .search-box { grid-column: auto; } }
   `
 })
 export class Inventory implements OnInit {
@@ -43,9 +45,7 @@ export class Inventory implements OnInit {
 
   items = signal<Item[]>([]);    // server-filtered list (current page is sliced client-side)
   subCategories = signal<SubCategory[]>([]);
-  categoryFilter = signal('');   // category / sub-category name
-  itemFilter = signal('');       // item name
-  skuFilter = signal('');        // SKU
+  search = signal('');           // matches item name, SKU, or category / sub-category
   lowOnly = signal(false);       // stock <= 10
   status = signal<'active' | 'inactive' | 'all'>('all');
 
@@ -54,16 +54,12 @@ export class Inventory implements OnInit {
   readonly pageSizeOptions = PAGE_SIZE_OPTIONS;
   pager = createServerPager(() => this.load());
 
-  setCategoryFilter(v: string) { this.categoryFilter.set(v); this.reload(); }
-  setItemFilter(v: string) { this.itemFilter.set(v); this.reload(); }
-  setSkuFilter(v: string) { this.skuFilter.set(v); this.reload(); }
+  setSearch(v: string) { this.search.set(v); this.reload(); }
   setLowOnly(v: boolean) { this.lowOnly.set(v); this.reload(); }
   setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.reload(); }
-  hasFilters = () => !!this.categoryFilter() || !!this.itemFilter() || !!this.skuFilter() || this.lowOnly() || this.status() !== 'all';
+  hasFilters = () => !!this.search() || this.lowOnly() || this.status() !== 'all';
   clearFilters() {
-    this.categoryFilter.set('');
-    this.itemFilter.set('');
-    this.skuFilter.set('');
+    this.search.set('');
     this.lowOnly.set(false);
     this.status.set('all');
     this.reload();
@@ -78,9 +74,7 @@ export class Inventory implements OnInit {
 
   load() {
     this.api.getItems({
-      category: this.categoryFilter() || undefined,
-      item: this.itemFilter() || undefined,
-      sku: this.skuFilter() || undefined,
+      search: this.search() || undefined,
       lowStock: this.lowOnly() || undefined,
       active: this.status(),
       page: this.pager.pageIndex() + 1,

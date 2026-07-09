@@ -7,15 +7,9 @@
   <mat-card class="table-card">
     <mat-card-content>
       <div class="filters">
-        <mat-form-field appearance="fill" class="f-customer">
-          <mat-label>Order #</mat-label>
-          <input matInput [ngModel]="orderNumberFilter()" (ngModelChange)="setOrderNumberFilter($event)" placeholder="Search order number" />
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
-
-        <mat-form-field appearance="fill" class="f-customer">
-          <mat-label>Customer Name</mat-label>
-          <input matInput [ngModel]="customerFilter()" (ngModelChange)="setCustomerFilter($event)" placeholder="Search customer" />
+        <mat-form-field appearance="fill" class="f-search">
+          <mat-label>Search</mat-label>
+          <input matInput [ngModel]="search()" (ngModelChange)="setSearch($event)" placeholder="Search by order number or customer name" />
           <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 

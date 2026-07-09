@@ -84,6 +84,7 @@ public class StockRequestsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockRequestDto>>> GetAll(
         [FromQuery] string? requestNumber, [FromQuery] DateTime? date, [FromQuery] string? item,
+        [FromQuery] string? search,
         [FromQuery] StockRequestStatus? status, [FromQuery] PaymentStatus? paymentStatus, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
@@ -112,6 +113,11 @@ public class StockRequestsController : ControllerBase
         {
             var t = item.Trim();
             query = query.Where(r => r.Items.Any(i => i.Item!.Name.Contains(t)));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            query = query.Where(r => r.RequestNumber.Contains(t) || r.Items.Any(i => i.Item!.Name.Contains(t)));
         }
         if (status is not null) query = query.Where(r => r.Status == status);
         if (paymentStatus is not null) query = query.Where(r => r.PaymentStatus == paymentStatus);

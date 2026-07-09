@@ -18,7 +18,8 @@ public class CustomersController : OwnedControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<CustomerDto>>> GetAll(
-        [FromQuery] string? name, [FromQuery] string? phone, [FromQuery] int? routeId, [FromQuery] string? active,
+        [FromQuery] string? name, [FromQuery] string? phone, [FromQuery] string? search,
+        [FromQuery] int? routeId, [FromQuery] string? active,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -36,6 +37,11 @@ public class CustomersController : OwnedControllerBase
         {
             var t = phone.Trim();
             q = q.Where(c => c.Phone != null && c.Phone.Contains(t));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            q = q.Where(c => c.Name.Contains(t) || (c.Phone != null && c.Phone.Contains(t)));
         }
         if (routeId is not null) q = q.Where(c => c.RouteId == routeId);
 

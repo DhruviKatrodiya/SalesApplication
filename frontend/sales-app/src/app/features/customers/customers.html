@@ -7,15 +7,9 @@
   <mat-card class="table-card">
     <mat-card-content>
       <div class="search-grid">
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Name</mat-label>
-          <input matInput [ngModel]="nameSearch()" (ngModelChange)="setNameSearch($event)" placeholder="customer name" />
-          <mat-icon matSuffix>search</mat-icon>
-        </mat-form-field>
-
-        <mat-form-field appearance="fill" subscriptSizing="dynamic">
-          <mat-label>Phone</mat-label>
-          <input matInput [ngModel]="phoneSearch()" (ngModelChange)="setPhoneSearch($event)" placeholder="phone" />
+        <mat-form-field class="search-box" appearance="fill" subscriptSizing="dynamic">
+          <mat-label>Search</mat-label>
+          <input matInput [ngModel]="search()" (ngModelChange)="setSearch($event)" placeholder="Search by customer name or phone" />
           <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 

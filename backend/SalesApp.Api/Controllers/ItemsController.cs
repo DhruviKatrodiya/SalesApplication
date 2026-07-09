@@ -27,6 +27,7 @@ public class ItemsController : OwnedControllerBase
     public async Task<ActionResult<PagedResult<ItemDto>>> GetAll(
         [FromQuery] int? subCategoryId, [FromQuery] bool lowStock = false, [FromQuery] int threshold = 10,
         [FromQuery] string? category = null, [FromQuery] string? item = null, [FromQuery] string? sku = null,
+        [FromQuery] string? search = null,
         [FromQuery] string? active = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
@@ -50,6 +51,15 @@ public class ItemsController : OwnedControllerBase
         {
             var term = sku.Trim();
             query = query.Where(i => i.Sku != null && i.Sku.Contains(term));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(i =>
+                i.Name.Contains(term) ||
+                (i.Sku != null && i.Sku.Contains(term)) ||
+                i.SubCategory!.Category!.Name.Contains(term) ||
+                i.SubCategory.Name.Contains(term));
         }
 
         var ordered = query.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id);

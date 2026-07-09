@@ -33,8 +33,7 @@ export class Customers implements OnInit {
 
   customers = signal<Customer[]>([]);
   routes = signal<Route[]>([]);
-  nameSearch = signal('');
-  phoneSearch = signal('');
+  search = signal('');               // matches customer name or phone
   routeFilter = signal<number>(0);   // 0 = "All routes" (shown selected by default)
   status = signal<'active' | 'inactive' | 'all'>('all');
 
@@ -56,8 +55,7 @@ export class Customers implements OnInit {
 
   load() {
     this.api.getCustomers({
-      name: this.nameSearch() || undefined,
-      phone: this.phoneSearch() || undefined,
+      search: this.search() || undefined,
       routeId: this.routeFilter() || undefined,
       active: this.status(),
       page: this.pager.pageIndex() + 1,
@@ -76,14 +74,12 @@ export class Customers implements OnInit {
   loadRoutes() { this.api.getAllRoutes().subscribe(list => this.routes.set(list)); }
 
   private reload() { this.pager.reset(); this.load(); }
-  setNameSearch(v: string) { this.nameSearch.set(v); this.reload(); }
-  setPhoneSearch(v: string) { this.phoneSearch.set(v); this.reload(); }
+  setSearch(v: string) { this.search.set(v); this.reload(); }
   setRouteFilter(v: number) { this.routeFilter.set(v); this.reload(); }
   setStatus(v: 'active' | 'inactive' | 'all') { this.status.set(v); this.reload(); }
-  hasFilters = () => !!this.nameSearch() || !!this.phoneSearch() || this.routeFilter() > 0 || this.status() !== 'all';
+  hasFilters = () => !!this.search() || this.routeFilter() > 0 || this.status() !== 'all';
   clearFilters() {
-    this.nameSearch.set('');
-    this.phoneSearch.set('');
+    this.search.set('');
     this.routeFilter.set(0);
     this.status.set('all');
     this.reload();

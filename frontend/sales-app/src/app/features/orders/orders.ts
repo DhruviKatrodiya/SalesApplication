@@ -52,15 +52,14 @@ export class Orders implements OnInit {
   items = signal<Item[]>([]);
 
   // ---- Filters ----
-  orderNumberFilter = signal<string>('');
-  customerFilter = signal<string>('');
+  search = signal<string>('');       // matches order number or customer name
   orderDateFilter = signal<Date | null>(null);
   deliveryStatusFilter = signal<number>(-1);   // -1 = "All" (shown selected by default)
   paidStatusFilter = signal<number>(-1);       // -1 = "All"
   activeFilter = signal<'active' | 'inactive' | 'all'>('all');
 
   hasFilters = computed(() =>
-    !!this.orderNumberFilter() || !!this.customerFilter() || !!this.orderDateFilter() ||
+    !!this.search() || !!this.orderDateFilter() ||
     this.deliveryStatusFilter() >= 0 || this.paidStatusFilter() >= 0 || this.activeFilter() !== 'all');
 
   columns = ['orderNumber', 'customer', 'orderDate', 'delivery', 'status', 'payment', 'total', 'remaining', 'active', 'actions'];
@@ -75,15 +74,13 @@ export class Orders implements OnInit {
 
   // Filter setters (reset to the first page and reload from the server on any change)
   private reload() { this.pager.reset(); this.load(); }
-  setOrderNumberFilter(v: string) { this.orderNumberFilter.set(v); this.reload(); }
-  setCustomerFilter(v: string) { this.customerFilter.set(v); this.reload(); }
+  setSearch(v: string) { this.search.set(v); this.reload(); }
   setOrderDateFilter(v: Date | null) { this.orderDateFilter.set(v); this.reload(); }
   setDeliveryStatusFilter(v: number) { this.deliveryStatusFilter.set(v); this.reload(); }
   setPaidStatusFilter(v: number) { this.paidStatusFilter.set(v); this.reload(); }
   setActiveFilter(v: 'active' | 'inactive' | 'all') { this.activeFilter.set(v); this.reload(); }
   clearFilters() {
-    this.orderNumberFilter.set('');
-    this.customerFilter.set('');
+    this.search.set('');
     this.orderDateFilter.set(null);
     this.deliveryStatusFilter.set(-1);
     this.paidStatusFilter.set(-1);
@@ -102,8 +99,7 @@ export class Orders implements OnInit {
   load() {
     const d = this.orderDateFilter();
     this.api.getOrders({
-      orderNumber: this.orderNumberFilter() || undefined,
-      customer: this.customerFilter() || undefined,
+      search: this.search() || undefined,
       orderDate: d ? this.toIsoDate(d) : undefined,
       status: this.deliveryStatusFilter() >= 0 ? (this.deliveryStatusFilter() as OrderStatus) : undefined,
       paymentStatus: this.paidStatusFilter() >= 0 ? this.paidStatusFilter() : undefined,

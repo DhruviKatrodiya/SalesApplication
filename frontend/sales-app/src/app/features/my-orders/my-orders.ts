@@ -51,15 +51,14 @@ export class MyOrders implements OnInit {
   advance = signal<StockRequestAdvance | null>(null);
 
   // ---- Filters ----
-  requestNumberFilter = signal<string>('');
+  search = signal<string>('');          // matches request number or item name
   dateFilter = signal<Date | null>(null);
-  itemFilter = signal<string>('');
   statusFilter = signal<number>(-1);    // -1 = "All" (shown selected by default)
   paymentFilter = signal<number>(-1);   // -1 = "All"
   activeFilter = signal<'active' | 'inactive' | 'all'>('all');
 
   hasFilters = () =>
-    !!this.requestNumberFilter() || !!this.dateFilter() || !!this.itemFilter() ||
+    !!this.search() || !!this.dateFilter() ||
     this.statusFilter() >= 0 || this.paymentFilter() >= 0 || this.activeFilter() !== 'all';
 
   readonly Status = StockRequestStatus;
@@ -84,9 +83,8 @@ export class MyOrders implements OnInit {
   load() {
     const d = this.dateFilter();
     this.api.getStockRequests({
-      requestNumber: this.requestNumberFilter() || undefined,
+      search: this.search() || undefined,
       date: d ? this.toIsoDate(d) : undefined,
-      item: this.itemFilter() || undefined,
       status: this.statusFilter() >= 0 ? this.statusFilter() : undefined,
       paymentStatus: this.paymentFilter() >= 0 ? this.paymentFilter() : undefined,
       active: this.activeFilter(),
@@ -108,16 +106,14 @@ export class MyOrders implements OnInit {
   }
 
   private reload() { this.pager.reset(); this.load(); }
-  setRequestNumberFilter(v: string) { this.requestNumberFilter.set(v); this.reload(); }
+  setSearch(v: string) { this.search.set(v); this.reload(); }
   setDateFilter(v: Date | null) { this.dateFilter.set(v); this.reload(); }
-  setItemFilter(v: string) { this.itemFilter.set(v); this.reload(); }
   setStatusFilter(v: number) { this.statusFilter.set(v); this.reload(); }
   setPaymentFilter(v: number) { this.paymentFilter.set(v); this.reload(); }
   setActiveFilter(v: 'active' | 'inactive' | 'all') { this.activeFilter.set(v); this.reload(); }
   clearFilters() {
-    this.requestNumberFilter.set('');
+    this.search.set('');
     this.dateFilter.set(null);
-    this.itemFilter.set('');
     this.statusFilter.set(-1);
     this.paymentFilter.set(-1);
     this.activeFilter.set('all');

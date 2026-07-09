@@ -43,7 +43,8 @@ public class OrdersController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<PagedResult<OrderDto>>> GetAll(
-        [FromQuery] string? orderNumber, [FromQuery] string? customer, [FromQuery] DateTime? orderDate,
+        [FromQuery] string? orderNumber, [FromQuery] string? customer, [FromQuery] string? search,
+        [FromQuery] DateTime? orderDate,
         [FromQuery] OrderStatus? status, [FromQuery] PaymentStatus? paymentStatus,
         [FromQuery] int? customerId, [FromQuery] bool mine = false, [FromQuery] string? active = null,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
@@ -65,6 +66,11 @@ public class OrdersController : ControllerBase
         {
             var t = customer.Trim();
             query = query.Where(o => o.Customer!.Name.Contains(t));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var t = search.Trim();
+            query = query.Where(o => o.OrderNumber.Contains(t) || o.Customer!.Name.Contains(t));
         }
         if (orderDate is not null)
         {

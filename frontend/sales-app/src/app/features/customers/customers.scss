@@ -5,6 +5,8 @@
   margin-bottom: 16px;
 }
 .search-grid mat-form-field { width: 100%; }
+.search-grid .search-box { grid-column: span 2; }
+@media (max-width: 600px) { .search-grid .search-box { grid-column: auto; } }
 
 .info-grid {
   display: grid;

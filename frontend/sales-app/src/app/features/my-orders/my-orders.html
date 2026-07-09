@@ -16,9 +16,9 @@
       }
 
       <div class="row" style="margin-bottom:16px; gap:12px; flex-wrap:wrap; align-items:flex-start">
-        <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:180px">
-          <mat-label>Request #</mat-label>
-          <input matInput [ngModel]="requestNumberFilter()" (ngModelChange)="setRequestNumberFilter($event)" placeholder="REQ-…" />
+        <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:300px">
+          <mat-label>Search</mat-label>
+          <input matInput [ngModel]="search()" (ngModelChange)="setSearch($event)" placeholder="Search by request number or item name" />
           <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
@@ -27,12 +27,6 @@
           <input matInput appDateInput [matDatepicker]="dp" [ngModel]="dateFilter()" (ngModelChange)="setDateFilter($event)" placeholder="dd-mm-yyyy" />
           <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
           <mat-datepicker #dp></mat-datepicker>
-        </mat-form-field>
-
-        <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:180px">
-          <mat-label>Items</mat-label>
-          <input matInput [ngModel]="itemFilter()" (ngModelChange)="setItemFilter($event)" placeholder="item name" />
-          <mat-icon matSuffix>search</mat-icon>
         </mat-form-field>
 
         <mat-form-field appearance="fill" subscriptSizing="dynamic" style="width:170px">

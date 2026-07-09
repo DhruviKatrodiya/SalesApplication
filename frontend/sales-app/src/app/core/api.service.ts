@@ -66,7 +66,7 @@ export class ApiService {
   activateSubCategory(id: number) { return this.http.put(`${this.base}/subcategories/${id}/activate`, {}); }
 
   // ---- Items / Inventory ----
-  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string; active?: string; page?: number; pageSize?: number }) {
+  getItems(opts?: { subCategoryId?: number; lowStock?: boolean; threshold?: number; category?: string; item?: string; sku?: string; search?: string; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.subCategoryId) p = p.set('subCategoryId', opts.subCategoryId);
     if (opts?.active) p = p.set('active', opts.active);
@@ -75,6 +75,7 @@ export class ApiService {
     if (opts?.category) p = p.set('category', opts.category);
     if (opts?.item) p = p.set('item', opts.item);
     if (opts?.sku) p = p.set('sku', opts.sku);
+    if (opts?.search) p = p.set('search', opts.search);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<Item>>(`${this.base}/items`, { params: p });
@@ -143,11 +144,12 @@ export class ApiService {
   activateRoute(id: number) { return this.http.put(`${this.base}/routes/${id}/activate`, {}); }
 
   // ---- Customers ----
-  getCustomers(opts?: { name?: string; phone?: string; routeId?: number; active?: string; page?: number; pageSize?: number }) {
+  getCustomers(opts?: { name?: string; phone?: string; search?: string; routeId?: number; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.name) p = p.set('name', opts.name);
     if (opts?.active) p = p.set('active', opts.active);
     if (opts?.phone) p = p.set('phone', opts.phone);
+    if (opts?.search) p = p.set('search', opts.search);
     if (opts?.routeId) p = p.set('routeId', opts.routeId);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
@@ -189,11 +191,12 @@ export class ApiService {
   activateTruck(id: number) { return this.http.put(`${this.base}/trucks/${id}/activate`, {}); }
 
   // ---- Orders ----
-  getOrders(opts?: { orderNumber?: string; customer?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; active?: string; page?: number; pageSize?: number }) {
+  getOrders(opts?: { orderNumber?: string; customer?: string; search?: string; orderDate?: string; status?: OrderStatus; paymentStatus?: number; mine?: boolean; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.orderNumber) p = p.set('orderNumber', opts.orderNumber);
     if (opts?.active) p = p.set('active', opts.active);
     if (opts?.customer) p = p.set('customer', opts.customer);
+    if (opts?.search) p = p.set('search', opts.search);
     if (opts?.orderDate) p = p.set('orderDate', opts.orderDate);
     if (opts?.status != null) p = p.set('status', opts.status);
     if (opts?.paymentStatus != null) p = p.set('paymentStatus', opts.paymentStatus);
@@ -242,12 +245,13 @@ export class ApiService {
   deletePayment(id: number) { return this.http.delete<Order>(`${this.base}/payments/${id}`); }
 
   // ---- Stock requests ("My Orders") ----
-  getStockRequests(opts?: { requestNumber?: string; date?: string; item?: string; status?: number; paymentStatus?: number; active?: string; page?: number; pageSize?: number }) {
+  getStockRequests(opts?: { requestNumber?: string; date?: string; item?: string; search?: string; status?: number; paymentStatus?: number; active?: string; page?: number; pageSize?: number }) {
     let p = new HttpParams();
     if (opts?.requestNumber) p = p.set('requestNumber', opts.requestNumber);
     if (opts?.active) p = p.set('active', opts.active);
     if (opts?.date) p = p.set('date', opts.date);
     if (opts?.item) p = p.set('item', opts.item);
+    if (opts?.search) p = p.set('search', opts.search);
     if (opts?.status != null) p = p.set('status', opts.status);
     if (opts?.paymentStatus != null) p = p.set('paymentStatus', opts.paymentStatus);
     if (opts?.page) p = p.set('page', opts.page);
