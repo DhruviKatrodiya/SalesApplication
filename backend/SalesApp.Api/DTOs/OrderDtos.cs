@@ -25,7 +25,8 @@ public record OrderDto(
     string? Notes, List<OrderItemDto> Items,
     int? TruckId = null, string? TruckName = null, bool IsActive = true);
 
-public record UpdateOrderStatusRequest(OrderStatus Status);
+public record UpdateOrderStatusRequest(OrderStatus Status, string? Note = null);
+public record OrderHistoryDto(int Id, OrderStatus? FromStatus, OrderStatus ToStatus, string? Note, DateTime ChangedAt, string? ChangedByName);
 public record UpdateDeliveryDateRequest(DateTime? DeliveryDate);
 public record UpdateReceivedStatusRequest(ReceivedStatus ReceivedStatus);
 
@@ -50,4 +51,4 @@ public record CustomerSearchResult(
 public record ReportRow(string Label, int OrderCount, decimal TotalAmount, decimal PaidAmount, decimal RemainingAmount);
 public record ReportSummary(
     string Period, int TotalOrders, decimal TotalAmount, decimal TotalPaid, decimal TotalRemaining,
-    int PendingOrders, int DeliveredOrders, int RowsTotal, List<ReportRow> Rows);
+    int PendingOrders, int DeliveredOrders, int RowsTotal, List<ReportRow> Rows, string Granularity = "Day");

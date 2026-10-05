@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<InventoryBatch> InventoryBatches => Set<InventoryBatch>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<OrderStatusHistory> OrderStatusHistory => Set<OrderStatusHistory>();
     public DbSet<PasswordResetOtp> PasswordResetOtps => Set<PasswordResetOtp>();
     public DbSet<DispatchDraft> DispatchDrafts => Set<DispatchDraft>();
     public DbSet<StockRequest> StockRequests => Set<StockRequest>();
@@ -43,6 +44,10 @@ public class AppDbContext : DbContext
 
         // Unique email for app user
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
+
+        b.Entity<OrderStatusHistory>().HasIndex(x => x.OrderId);
+        b.Entity<OrderStatusHistory>().Property(x => x.Note).HasMaxLength(500);
+        b.Entity<OrderStatusHistory>().Property(x => x.ChangedByName).HasMaxLength(200);
         b.Entity<Order>().HasIndex(x => x.OrderNumber).IsUnique();
         b.Entity<StockRequest>().HasIndex(x => x.RequestNumber).IsUnique();
         b.Entity<PasswordResetOtp>().HasIndex(x => x.Email);

@@ -23,6 +23,8 @@ import {
 import { OrderDialog } from './order-dialog';
 import { PaymentDialog } from './payment-dialog';
 import { OrderItemsDialog } from './order-items-dialog';
+import { OrderStatusDialog } from './order-status-dialog';
+import { OrderTrackDialog } from './order-track-dialog';
 import { ConfirmDialog } from '../../shared/confirm-dialog';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 import { DateInputDirective } from '../../shared/date-input.directive';
@@ -178,8 +180,19 @@ export class Orders implements OnInit {
     });
   }
 
-  changeStatus(o: Order, status: OrderStatus) {
-    this.api.updateOrderStatus(o.id, status).subscribe(updated => {
+  updateStatus(o: Order) {
+    this.dialog.open(OrderStatusDialog, { data: { orderNumber: o.orderNumber, status: o.status } })
+      .afterClosed().subscribe((res: { status: OrderStatus; note?: string } | undefined) => {
+        if (res) this.changeStatus(o, res.status, res.note);
+      });
+  }
+
+  track(o: Order) {
+    this.dialog.open(OrderTrackDialog, { data: o, width: '560px', maxWidth: '95vw' });
+  }
+
+  changeStatus(o: Order, status: OrderStatus, note?: string) {
+    this.api.updateOrderStatus(o.id, status, note).subscribe(updated => {
       this.snack.open('Status updated', 'Close', { duration: 1500 });
       this.replace(updated);
     });

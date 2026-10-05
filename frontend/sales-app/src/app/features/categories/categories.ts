@@ -150,7 +150,7 @@ export class Categories implements OnInit {
   }
   deleteCategory(c: Category, ev: Event) {
     ev.stopPropagation();
-    this.confirm(`Delete category "${c.name}"? This removes its sub-categories and items.`).subscribe(ok => {
+    this.confirm(`Delete category "${c.name}"? It can only be deleted when it has no active sub-categories.`).subscribe(ok => {
       if (ok) this.api.deleteCategory(c.id).subscribe(() => {
         if (this.selected()?.id === c.id) { this.selected.set(null); this.subCategories.set([]); this.subPager.total.set(0); }
         this.snack.open('Category deleted', 'Close', { duration: 2000 });
@@ -184,7 +184,7 @@ export class Categories implements OnInit {
   }
   activateCategory(c: Category, ev: Event) {
     ev.stopPropagation();
-    this.api.activateCategory(c.id).subscribe(() => { this.snack.open('Category activated', 'Close', { duration: 2000 }); this.afterCategoryChange(); });
+    this.api.activateCategory(c.id).subscribe(() => { this.snack.open('Category activated', 'Close', { duration: 2000 }); this.afterCategoryChange(); if (this.selected()?.id === c.id) this.loadSubs(); });
   }
   activateSub(s: SubCategory) {
     this.api.activateSubCategory(s.id).subscribe(() => { this.snack.open('Sub-category activated', 'Close', { duration: 2000 }); this.loadCategories(); this.loadSubs(); });

@@ -100,6 +100,11 @@ export interface Order {
   truckId?: number | null; truckName?: string | null; isActive: boolean;
 }
 
+export interface OrderHistoryEntry {
+  id: number; fromStatus: OrderStatus | null; toStatus: OrderStatus;
+  note?: string | null; changedAt: string; changedByName?: string | null;
+}
+
 // ---- Trucks (managed list, each carries its own per-item stock) ----
 export interface Truck { id: number; name: string; createdAt: string; itemCount: number; totalUnits: number; isActive: boolean; }
 export interface TruckStockItem { itemId: number; name: string; sku?: string; unit?: string; quantity: number; unitPrice: number; }
@@ -117,6 +122,7 @@ export interface ReportSummary {
   period: string; totalOrders: number;
   totalAmount: number; totalPaid: number; totalRemaining: number;
   pendingOrders: number; deliveredOrders: number; rowsTotal: number; rows: ReportRow[];
+  granularity?: 'Day' | 'Month' | 'Year';
 }
 export interface CustomerReportRow {
   customerId: number; customerName: string;

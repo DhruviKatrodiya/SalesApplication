@@ -77,6 +77,13 @@ public class CategoriesController : OwnedControllerBase
     {
         var c = await _db.Categories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == CurrentUserId);
         if (c is null) return NotFound();
+
+        // A category that still has active sub-categories assigned to it can't be deleted.
+        var activeSubs = await _db.SubCategories.CountAsync(x => x.CategoryId == id && x.IsActive);
+        if (activeSubs > 0)
+            return BadRequest(new MessageResponse(
+                $"This category still has {activeSubs} active sub-categor{(activeSubs == 1 ? "y" : "ies")} assigned to it and cannot be deleted. Delete or move them first."));
+
         c.IsActive = false;
         await _db.SaveChangesAsync();
         return NoContent();

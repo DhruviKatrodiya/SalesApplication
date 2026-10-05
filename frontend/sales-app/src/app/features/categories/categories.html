@@ -89,11 +89,13 @@
           Sub-Categories @if (selected()) { <span class="muted">of {{ selected()!.name }}</span> }
         </mat-card-title>
         <span class="spacer"></span>
-        <button mat-flat-button color="primary" (click)="addSub()"><mat-icon>add</mat-icon> Add</button>
+        <button mat-flat-button color="primary" (click)="addSub()" [disabled]="selected() && !selected()!.isActive"><mat-icon>add</mat-icon> Add</button>
       </mat-card-header>
       <mat-card-content>
         @if (!selected()) {
           <div class="empty">Select a category to view its sub-categories.</div>
+        } @else if (!selected()!.isActive) {
+          <div class="empty">This category is inactive. Activate it to view its sub-categories.</div>
         } @else {
           <div style="display:flex; gap:12px; align-items:flex-start">
             <mat-form-field appearance="fill" class="search-field" subscriptSizing="dynamic" style="flex:1">
