@@ -1,4 +1,8 @@
-<h2 mat-dialog-title>Payments — {{ order().orderNumber }}</h2>
+<h2 mat-dialog-title class="title-row">
+  Payments — {{ order().orderNumber }}
+  <span class="spacer"></span>
+  <button mat-icon-button (click)="close()" aria-label="Close"><mat-icon>close</mat-icon></button>
+</h2>
 <mat-dialog-content>
   <div class="dialog-form">
     <div class="summary">

@@ -81,7 +81,8 @@ async function main() {
   ok('Orders: create + number format', /^ORD-\d{2}-\d{2}-\d{2}-\d{6}$/.test(ord.orderNumber), ord.orderNumber);
   const ph2 = await expectOk('GET', `/items/${item.id}/price-history`);
   ok('Orders: FIFO consumed oldest first (remaining 30@20)', ph2.stockQuantity === 30 && ph2.stockValue === 600, `value=${ph2.stockValue}`);
-  const mv = await expectOk('GET', `/items/${item.id}/movements`);
+  const mvRes = await expectOk('GET', `/items/${item.id}/movements?pageSize=100`);
+  const mv = Array.isArray(mvRes) ? mvRes : mvRes.items;
   const cogs = mv.filter(m => m.type === 'OUT' && m.refType === 'Order').reduce((s, m) => s + m.totalCost, 0);
   ok('Orders: FIFO COGS = 100*10 + 20*20 = 1400', cogs === 1400, `cogs=${cogs}`);
 

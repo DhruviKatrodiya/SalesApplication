@@ -20,6 +20,8 @@ import { Order, Payment, PaymentStatusLabels } from '../../core/models';
   ],
   templateUrl: './payment-dialog.html',
   styles: `
+    .title-row { display: flex; align-items: center; }
+    .spacer { flex: 1 1 auto; }
     .dialog-form { min-width: 480px; }
     .full { width: 100%; }
     .summary { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
