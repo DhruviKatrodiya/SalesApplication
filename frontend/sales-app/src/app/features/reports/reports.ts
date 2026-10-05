@@ -6,37 +6,31 @@ import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatInputModule } from '@angular/material/input';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { ApiService } from '../../core/api.service';
 import { ReportSummary, CustomerReportRow } from '../../core/models';
+import { DateInputDirective } from '../../shared/date-input.directive';
 import { createServerPager, PAGE_SIZE_OPTIONS } from '../../shared/pager';
 
 @Component({
   selector: 'app-reports',
   imports: [
     FormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatSelectModule, MatButtonToggleModule, MatPaginatorModule
+    MatFormFieldModule, MatInputModule, MatDatepickerModule, DateInputDirective, MatPaginatorModule
   ],
   templateUrl: './reports.html'
 })
 export class Reports implements OnInit {
   private api = inject(ApiService);
 
-  mode = signal<'daily' | 'monthly' | 'yearly'>('monthly');
-  year = signal<number>(new Date().getFullYear());
-  month = signal<number | null>(null);
+  // Only a From/To date filter. Defaults to the current month so far.
+  fromDate = signal<Date | null>(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  toDate = signal<Date | null>(new Date());
 
   summary = signal<ReportSummary | null>(null);
   byCustomer = signal<CustomerReportRow[]>([]);
-
-  years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - i);
-  months = [
-    { v: 1, n: 'January' }, { v: 2, n: 'February' }, { v: 3, n: 'March' }, { v: 4, n: 'April' },
-    { v: 5, n: 'May' }, { v: 6, n: 'June' }, { v: 7, n: 'July' }, { v: 8, n: 'August' },
-    { v: 9, n: 'September' }, { v: 10, n: 'October' }, { v: 11, n: 'November' }, { v: 12, n: 'December' }
-  ];
 
   rowColumns = ['srNo', 'label', 'orders', 'total', 'paid', 'remaining'];
   custColumns = ['srNo', 'customer', 'orders', 'pending', 'delivered', 'total', 'paid', 'remaining'];
@@ -48,36 +42,23 @@ export class Reports implements OnInit {
   ngOnInit() { this.run(); this.loadByCustomer(); }
 
   // A filter change resets the breakdown to the first page, then reloads.
-  private reloadReport() { this.rowsPager.reset(); this.run(); }
+  private reloadReport() { this.rowsPager.reset(); this.run(); this.custPager.reset(); this.loadByCustomer(); }
 
-  setMode(m: 'daily' | 'monthly' | 'yearly') {
-    this.mode.set(m);
-    // Daily defaults to the current month and year.
-    if (m === 'daily') {
-      const now = new Date();
-      this.year.set(now.getFullYear());
-      this.month.set(now.getMonth() + 1);
-    }
-    this.reloadReport();
+  setFromDate(d: Date | null) { this.fromDate.set(d); this.reloadReport(); }
+  setToDate(d: Date | null) { this.toDate.set(d); this.reloadReport(); }
+
+  /** Local calendar date as yyyy-MM-dd (no timezone shift). */
+  private ymd(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
-
-  setYear(y: number) { this.year.set(y); this.reloadReport(); }
-  setMonth(m: number | null) { this.month.set(m); this.reloadReport(); }
 
   /** Reload callback for the breakdown pager — fetches the current breakdown page from the server. */
   run() {
     const page = this.rowsPager.pageIndex() + 1;
     const pageSize = this.rowsPager.pageSize();
-    if (this.mode() === 'monthly') {
-      this.api.monthlyReport(this.year(), this.month() ?? undefined, page, pageSize).subscribe(s => this.applyReport(s));
-    } else if (this.mode() === 'daily') {
-      // Daily needs a specific month — default to the current one if none chosen.
-      const m = this.month() ?? (new Date().getMonth() + 1);
-      if (this.month() == null) this.month.set(m);
-      this.api.dailyReport(this.year(), m, page, pageSize).subscribe(s => this.applyReport(s));
-    } else {
-      this.api.yearlyReport(this.year(), page, pageSize).subscribe(s => this.applyReport(s));
-    }
+    const from = this.fromDate(), to = this.toDate();
+    if (!from || !to || to < from) { this.summary.set(null); this.rowsPager.total.set(0); return; }
+    this.api.rangeReport(this.ymd(from), this.ymd(to), page, pageSize).subscribe(s => this.applyReport(s));
   }
 
   private applyReport(s: ReportSummary) {
@@ -91,8 +72,17 @@ export class Reports implements OnInit {
     this.rowsPager.total.set(s.rowsTotal);
   }
 
+  /** The inclusive date window the filter describes (same period the summary cards cover). */
+  private periodBounds(): { from: string; to: string } | null {
+    const f = this.fromDate(), t = this.toDate();
+    return f && t && t >= f ? { from: this.ymd(f), to: this.ymd(t) } : null;
+  }
+
   loadByCustomer() {
+    const bounds = this.periodBounds();
+    if (!bounds) { this.byCustomer.set([]); this.custPager.total.set(0); return; }
     this.api.customerReport({
+      ...bounds,
       page: this.custPager.pageIndex() + 1,
       pageSize: this.custPager.pageSize()
     }).subscribe(res => {

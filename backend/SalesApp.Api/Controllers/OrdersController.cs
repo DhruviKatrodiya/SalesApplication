@@ -41,6 +41,19 @@ public class OrdersController : ControllerBase
             .Include(o => o.Items).ThenInclude(i => i.Item)
             .Include(o => o.Payments);
 
+    private async Task<string?> ActorNameAsync() => (await _db.Users.FindAsync(CurrentUserId))?.FullName;
+
+    /// <summary>Adds an entry to the order's tracking timeline (saved with the order's next SaveChanges).</summary>
+    private static void LogHistory(Order o, OrderStatus? from, OrderStatus to, string? note, string? by) =>
+        o.StatusHistory.Add(new OrderStatusHistory
+        {
+            FromStatus = from, ToStatus = to, ChangedAt = DateTime.UtcNow, ChangedByName = by,
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
+        });
+
+    private static string DeliveryNote(DateTime? d) =>
+        d is null ? "Planned delivery date cleared" : $"Planned delivery date set to {d:dd-MM-yyyy}";
+
     [HttpGet]
     public async Task<ActionResult<PagedResult<OrderDto>>> GetAll(
         [FromQuery] string? orderNumber, [FromQuery] string? customer, [FromQuery] string? search,
@@ -207,6 +220,7 @@ public class OrdersController : ControllerBase
         if (!DocNumber.IsValid(order.OrderNumber, "ORD"))
             return StatusCode(500, new MessageResponse("Failed to generate a valid order number."));
 
+        LogHistory(order, null, OrderStatus.Pending, "Order created", await ActorNameAsync());
         _db.Orders.Add(order);
         await _db.SaveChangesAsync();
 
@@ -297,9 +311,15 @@ public class OrdersController : ControllerBase
 
         order.CustomerId = req.CustomerId;
         order.OrderDate = req.OrderDate ?? order.OrderDate;
+        var prevStatus = order.Status;
+        var prevDelivery = order.DeliveryDate;
         order.DeliveryDate = req.DeliveryDate;
         order.Notes = req.Notes;
         if (req.Status is not null) order.Status = req.Status.Value;
+        if (order.Status != prevStatus)
+            LogHistory(order, prevStatus, order.Status, "Changed while editing the order", await ActorNameAsync());
+        if (order.DeliveryDate != prevDelivery)
+            LogHistory(order, order.Status, order.Status, DeliveryNote(order.DeliveryDate), await ActorNameAsync());
         order.Source = newSource;
         order.TruckId = newTruck?.Id;
 
@@ -340,6 +360,17 @@ public class OrdersController : ControllerBase
         return Ok(Mappers.ToDto(saved));
     }
 
+    /// <summary>The order's tracking timeline, oldest first.</summary>
+    [HttpGet("{id:int}/history")]
+    public async Task<ActionResult<List<OrderHistoryDto>>> History(int id)
+    {
+        var owned = await _db.Orders.AnyAsync(o => o.Id == id && o.SalesmanId == CurrentUserId);
+        if (!owned) return NotFound();
+        var list = await _db.OrderStatusHistory.Where(h => h.OrderId == id)
+            .OrderBy(h => h.ChangedAt).ThenBy(h => h.Id).ToListAsync();
+        return Ok(list.Select(h => new OrderHistoryDto(h.Id, h.FromStatus, h.ToStatus, h.Note, h.ChangedAt, h.ChangedByName)).ToList());
+    }
+
     [HttpPut("{id:int}/status")]
     public async Task<ActionResult<OrderDto>> UpdateStatus(int id, UpdateOrderStatusRequest req)
     {
@@ -350,7 +381,10 @@ public class OrdersController : ControllerBase
             return BadRequest(new MessageResponse("This order is cancelled and can no longer be changed."));
         if (order.Status == OrderStatus.Completed)
             return BadRequest(new MessageResponse("This order is completed and its status can no longer be changed."));
+        var from = order.Status;
         order.Status = req.Status;
+        if (from != req.Status || !string.IsNullOrWhiteSpace(req.Note))
+            LogHistory(order, from, req.Status, req.Note, await ActorNameAsync());
         OrderMath.Recalculate(order);   // payment status may shift Advance <-> Partial with delivery state
         await _db.SaveChangesAsync();
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);
@@ -363,6 +397,8 @@ public class OrdersController : ControllerBase
         var order = await _db.Orders.FindAsync(id);
         if (order is null) return NotFound();
         if (order.SalesmanId != CurrentUserId) return NotOwner();
+        if (order.DeliveryDate != req.DeliveryDate)
+            LogHistory(order, order.Status, order.Status, DeliveryNote(req.DeliveryDate), await ActorNameAsync());
         order.DeliveryDate = req.DeliveryDate;
         await _db.SaveChangesAsync();
         var saved = await WithIncludes().FirstAsync(o => o.Id == id);
@@ -434,6 +470,7 @@ public class OrdersController : ControllerBase
             }
         }
 
+        LogHistory(order, order.Status, OrderStatus.Cancelled, "Order cancelled", await ActorNameAsync());
         order.Status = OrderStatus.Cancelled;
         order.RemainingAmount = 0;   // no balance due; the paid amount becomes the customer's advance
         await _db.SaveChangesAsync();

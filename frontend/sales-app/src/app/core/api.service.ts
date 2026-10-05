@@ -5,7 +5,7 @@ import { environment } from '../../environments/environment';
 import {
   Category, SubCategory, Item, Customer, CustomerSearchResult, CustomerAdvance,
   Order, OrderItem, OrderStatus, Payment, Dispatch, ReceivedStatus,
-  ReportSummary, CustomerReportRow, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment, StockRequestAdvance,
+  ReportSummary, CustomerReportRow, OrderHistoryEntry, User, PagedResult, DispatchDraft, Route, StockRequest, StockRequestPayment, StockRequestAdvance,
   Truck, TruckStockItem, ItemPriceHistory, InventoryMovement
 } from './models';
 
@@ -218,7 +218,8 @@ export class ApiService {
   }
   createOrder(b: any) { return this.http.post<Order>(`${this.base}/orders`, b); }
   updateOrder(id: number, b: any) { return this.http.put<Order>(`${this.base}/orders/${id}`, b); }
-  updateOrderStatus(id: number, status: OrderStatus) { return this.http.put<Order>(`${this.base}/orders/${id}/status`, { status }); }
+  updateOrderStatus(id: number, status: OrderStatus, note?: string) { return this.http.put<Order>(`${this.base}/orders/${id}/status`, { status, note: note || undefined }); }
+  orderHistory(id: number) { return this.http.get<OrderHistoryEntry[]>(`${this.base}/orders/${id}/history`); }
   updateDeliveryDate(id: number, deliveryDate: string | null) { return this.http.put<Order>(`${this.base}/orders/${id}/delivery-date`, { deliveryDate }); }
   updateReceivedStatus(orderId: number, orderItemId: number, receivedStatus: ReceivedStatus) {
     return this.http.put<Order>(`${this.base}/orders/${orderId}/items/${orderItemId}/received-status`, { receivedStatus });
@@ -292,12 +293,18 @@ export class ApiService {
     const p = new HttpParams().set('year', year).set('month', month).set('page', page).set('pageSize', pageSize);
     return this.http.get<ReportSummary>(`${this.base}/reports/daily`, { params: p });
   }
+  rangeReport(from: string, to: string, page: number, pageSize: number) {
+    const p = new HttpParams().set('from', from).set('to', to).set('page', page).set('pageSize', pageSize);
+    return this.http.get<ReportSummary>(`${this.base}/reports/range`, { params: p });
+  }
   yearlyReport(year: number, page: number, pageSize: number) {
     const p = new HttpParams().set('year', year).set('page', page).set('pageSize', pageSize);
     return this.http.get<ReportSummary>(`${this.base}/reports/yearly`, { params: p });
   }
-  customerReport(opts?: { page?: number; pageSize?: number }) {
+  customerReport(opts?: { page?: number; pageSize?: number; from?: string; to?: string }) {
     let p = new HttpParams();
+    if (opts?.from) p = p.set('from', opts.from);
+    if (opts?.to) p = p.set('to', opts.to);
     if (opts?.page) p = p.set('page', opts.page);
     if (opts?.pageSize) p = p.set('pageSize', opts.pageSize);
     return this.http.get<PagedResult<CustomerReportRow>>(`${this.base}/reports/by-customer`, { params: p });

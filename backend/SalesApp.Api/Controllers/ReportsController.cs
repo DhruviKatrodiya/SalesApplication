@@ -63,6 +63,46 @@ public class ReportsController : OwnedControllerBase
         return Ok(Build($"{MonthNames[month - 1]} {year}", orders, rows, page, pageSize));
     }
 
+    /// <summary>
+    /// Report for an arbitrary date range (inclusive). The breakdown unit follows the range: by day up to 31 days,
+    /// by month up to a year, by year beyond that.
+    /// </summary>
+    [HttpGet("range")]
+    public async Task<ActionResult<ReportSummary>> Range(
+        [FromQuery] DateTime from, [FromQuery] DateTime to,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+    {
+        var start = from.Date;
+        var end = to.Date;
+        if (end < start) return BadRequest(new MessageResponse("'To' date cannot be before 'From' date."));
+        var endExclusive = end.AddDays(1);
+
+        var uid = CurrentUserId;
+        var orders = await _db.Orders
+            .Where(o => o.SalesmanId == uid && o.IsActive && o.Status != OrderStatus.Cancelled
+                        && o.OrderDate >= start && o.OrderDate < endExclusive)
+            .ToListAsync();
+
+        var spanDays = (end - start).Days + 1;
+        var granularity = spanDays <= 31 ? "Day" : spanDays <= 366 ? "Month" : "Year";
+
+        List<ReportRow> rows = granularity switch
+        {
+            "Day" => orders.GroupBy(o => o.OrderDate.Date).OrderBy(g => g.Key)
+                .Select(g => Row($"{g.Key:dd} {MonthNames[g.Key.Month - 1]} {g.Key:yyyy}", g)).ToList(),
+            "Month" => orders.GroupBy(o => new { o.OrderDate.Year, o.OrderDate.Month }).OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+                .Select(g => Row($"{MonthNames[g.Key.Month - 1]} {g.Key.Year}", g)).ToList(),
+            _ => orders.GroupBy(o => o.OrderDate.Year).OrderBy(g => g.Key)
+                .Select(g => Row(g.Key.ToString(), g)).ToList()
+        };
+
+        var period = start == end ? $"{start:dd-MM-yyyy}" : $"{start:dd-MM-yyyy} to {end:dd-MM-yyyy}";
+        return Ok(Build(period, orders, rows, page, pageSize) with { Granularity = granularity });
+    }
+
+    private static ReportRow Row(string label, IEnumerable<Order> g) =>
+        new(label, g.Count(), g.Sum(o => o.TotalAmount), g.Sum(o => o.PaidAmount), g.Sum(o => o.RemainingAmount));
+
     /// <summary>Yearly report broken down by month.</summary>
     [HttpGet("yearly")]
     public async Task<ActionResult<ReportSummary>> Yearly(
@@ -80,18 +120,26 @@ public class ReportsController : OwnedControllerBase
         return Ok(Build($"{year}", orders, rows, page, pageSize));
     }
 
-    /// <summary>Per-customer summary: pending vs delivered counts and outstanding balances.</summary>
+    /// <summary>
+    /// Per-customer summary: pending vs delivered counts and outstanding balances. Optionally limited to orders
+    /// placed between <c>from</c> and <c>to</c> (both inclusive dates); omit both for all time.
+    /// </summary>
     [HttpGet("by-customer")]
     public async Task<ActionResult<PagedResult<object>>> ByCustomer(
+        [FromQuery] DateTime? from, [FromQuery] DateTime? to,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
         page = page < 1 ? 1 : page;
         pageSize = pageSize is < 1 or > 1000 ? 5 : pageSize;
 
         var uid = CurrentUserId;
-        var grouped = _db.Orders
+        var orders = _db.Orders
             .Include(o => o.Customer)
-            .Where(o => o.SalesmanId == uid && o.IsActive && o.Status != OrderStatus.Cancelled)
+            .Where(o => o.SalesmanId == uid && o.IsActive && o.Status != OrderStatus.Cancelled);
+        if (from is not null) { var start = from.Value.Date; orders = orders.Where(o => o.OrderDate >= start); }
+        if (to is not null) { var endExclusive = to.Value.Date.AddDays(1); orders = orders.Where(o => o.OrderDate < endExclusive); }
+
+        var grouped = orders
             .GroupBy(o => new { o.CustomerId, o.Customer!.Name })
             .Select(g => new
             {

@@ -95,6 +95,8 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let o">
+            <button mat-icon-button matTooltip="Track order" (click)="track(o)"><mat-icon>timeline</mat-icon></button>
+            <button mat-icon-button matTooltip="Update status" [disabled]="isLocked(o)" (click)="updateStatus(o)"><mat-icon>local_shipping</mat-icon></button>
             <button mat-icon-button matTooltip="Payments" [disabled]="isCancelled(o)" (click)="managePayments(o)"><mat-icon>payments</mat-icon></button>
             <button mat-icon-button matTooltip="Items — mark received status" [disabled]="isCancelled(o)" (click)="viewItems(o)"><mat-icon>checklist</mat-icon></button>
             <button mat-icon-button matTooltip="Edit order" [disabled]="isLocked(o)" (click)="edit(o)"><mat-icon>edit</mat-icon></button>
